@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "136329886535",
+    "project_id": "deviceguardian-e0150",
+    "storage_bucket": "deviceguardian-e0150.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:136329886535:android:e2cf2a1f7f4e247eb92a62",
+        "android_client_info": {
+          "package_name": "com.device.guardian.user.deviceguardianuser"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7Qq9_vgkI72vliADC8rg1NWRFtZa0ZX0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:136329886535:android:b7858fb7ce933ca7b92a62",
+        "android_client_info": {
+          "package_name": "com.example.deviceguardianadmin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7Qq9_vgkI72vliADC8rg1NWRFtZa0ZX0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
