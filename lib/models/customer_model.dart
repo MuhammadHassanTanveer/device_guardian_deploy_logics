@@ -51,20 +51,33 @@ class PaginatedCustomersModel {
   });
 
   factory PaginatedCustomersModel.fromJson(Map<String, dynamic> json) {
-    // Handle the data field - can be "data" or "Data"
+    // Handle the new nested response structure: { success, data: { current_page, data: [...], ... } }
     List<Datum> customerList = [];
-    final dataField = json["data"] ?? json["Data"];
-    
-    if (dataField is List) {
-      customerList = List<Datum>.from(dataField.map((x) => Datum.fromJson(x)));
-    }
-    
-    // Handle meta field
     CustomerMeta metaData;
-    if (json.containsKey("meta") && json["meta"] is Map) {
-      metaData = CustomerMeta.fromJson(json["meta"]);
-    } else {
-      // Create default meta if not present
+    
+    final outerData = json["data"] ?? json["Data"];
+    
+    if (outerData is Map<String, dynamic>) {
+      // New API structure: data contains pagination info and nested data array
+      final nestedData = outerData["data"];
+      if (nestedData is List) {
+        customerList = List<Datum>.from(nestedData.map((x) => Datum.fromJson(x)));
+      }
+      
+      // Extract meta from the outer data object
+      metaData = CustomerMeta(
+        currentPage: outerData["current_page"] ?? 1,
+        lastPage: outerData["last_page"] ?? 1,
+        perPage: outerData["per_page"] is int ? outerData["per_page"] : int.tryParse(outerData["per_page"]?.toString() ?? '10') ?? 10,
+        total: outerData["total"] ?? 0,
+        nextPageUrl: outerData["next_page_url"],
+        prevPageUrl: outerData["prev_page_url"],
+        from: outerData["from"],
+        to: outerData["to"],
+      );
+    } else if (outerData is List) {
+      // Old API structure: data is directly a list
+      customerList = List<Datum>.from(outerData.map((x) => Datum.fromJson(x)));
       metaData = CustomerMeta(
         currentPage: 1,
         lastPage: 1,
@@ -73,6 +86,20 @@ class PaginatedCustomersModel {
         nextPageUrl: null,
         prevPageUrl: null,
       );
+    } else {
+      // Fallback: Handle meta field if present at root level
+      if (json.containsKey("meta") && json["meta"] is Map) {
+        metaData = CustomerMeta.fromJson(json["meta"]);
+      } else {
+        metaData = CustomerMeta(
+          currentPage: 1,
+          lastPage: 1,
+          perPage: customerList.length,
+          total: customerList.length,
+          nextPageUrl: null,
+          prevPageUrl: null,
+        );
+      }
     }
     
     return PaginatedCustomersModel(
@@ -99,6 +126,8 @@ class CustomerMeta {
   final int total;
   final String? nextPageUrl;
   final String? prevPageUrl;
+  final int? from;
+  final int? to;
 
   CustomerMeta({
     required this.currentPage,
@@ -107,15 +136,19 @@ class CustomerMeta {
     required this.total,
     this.nextPageUrl,
     this.prevPageUrl,
+    this.from,
+    this.to,
   });
 
   factory CustomerMeta.fromJson(Map<String, dynamic> json) => CustomerMeta(
     currentPage: json["current_page"] ?? 1,
     lastPage: json["last_page"] ?? 1,
-    perPage: json["per_page"] ?? 10,
+    perPage: json["per_page"] is int ? json["per_page"] : int.tryParse(json["per_page"]?.toString() ?? '10') ?? 10,
     total: json["total"] ?? 0,
     nextPageUrl: json["next_page_url"],
     prevPageUrl: json["prev_page_url"],
+    from: json["from"],
+    to: json["to"],
   );
 
   Map<String, dynamic> toJson() => {
@@ -125,6 +158,8 @@ class CustomerMeta {
     "total": total,
     "next_page_url": nextPageUrl,
     "prev_page_url": prevPageUrl,
+    "from": from,
+    "to": to,
   };
 }
 
@@ -159,13 +194,18 @@ class CustomerLinks {
 
 class Datum {
   final int id;
+  final String? hashId;
+  final String customerCode;
   final String customerName;
-  final String customerMobileNo;
+  final String customerMobileNo; // Maps to contact_number in new API
   final String email;
   final String cnic;
   final int country;
   final int state;
   final int city;
+  final String? countryName;
+  final String? stateName;
+  final String? cityName;
   final String address;
   final String? googleMap;
   final String? loanBy;
@@ -175,6 +215,7 @@ class Datum {
   final String deviceStatus;
   final String status;
   final String lockCode;
+  final String? unlockCode; // New field from API
   final String activatedBy;
   final String mobilePicture;
   final String mobileType;
@@ -183,6 +224,8 @@ class Datum {
   final String? note;
   final String? suggestion;
   final int createdBy;
+  final String? createdByName;
+  final String? createdByCode;
   final int fosId;
   final int retailerId;
   final int isDeleted;
@@ -191,6 +234,7 @@ class Datum {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final int isActive;
+  final bool lockStatus; // New field from API
   final String serialNo;
   final String fcmToken;
   // New fields
@@ -211,10 +255,11 @@ class Datum {
   final String cnicFrontImage;
   final String cnicBackImage;
   final String profileImage;
-  final String customerCode;
 
   Datum({
     required this.id,
+    this.hashId,
+    required this.customerCode,
     required this.customerName,
     required this.customerMobileNo,
     required this.email,
@@ -222,6 +267,9 @@ class Datum {
     required this.country,
     required this.state,
     required this.city,
+    this.countryName,
+    this.stateName,
+    this.cityName,
     required this.address,
     this.googleMap,
     this.loanBy,
@@ -231,6 +279,7 @@ class Datum {
     required this.deviceStatus,
     required this.status,
     required this.lockCode,
+    this.unlockCode,
     required this.activatedBy,
     required this.mobilePicture,
     required this.mobileType,
@@ -239,6 +288,8 @@ class Datum {
     this.note,
     this.suggestion,
     required this.createdBy,
+    this.createdByName,
+    this.createdByCode,
     required this.fosId,
     required this.retailerId,
     required this.isDeleted,
@@ -247,6 +298,7 @@ class Datum {
     required this.createdAt,
     this.updatedAt,
     required this.isActive,
+    required this.lockStatus,
     required this.serialNo,
     required this.fcmToken,
     required this.actualDeviceStatus,
@@ -266,65 +318,141 @@ class Datum {
     required this.cnicFrontImage,
     required this.cnicBackImage,
     required this.profileImage,
-    required this.customerCode,
   });
 
-  factory Datum.fromJson(Map<String, dynamic> json) => Datum(
-    id: json["id"] ?? 0,
-    customerName: json["customer_name"] ?? '',
-    customerMobileNo: json["customer_mobile_no"] ?? '',
-    email: json["email"] ?? '',
-    cnic: json["cnic"] ?? '',
-    country: _parseInt(json["country"]),
-    state: _parseInt(json["state"]),
-    city: _parseInt(json["city"]),
-    address: json["address"] ?? '',
-    googleMap: json["google_map"],
-    loanBy: json["loan_by"],
-    model: json["model"] ?? '',
-    imei1: json["imei_1"] ?? '',
-    imei2: json["imei_2"],
-    deviceStatus: json["device_status"] ?? '',
-    status: json["status"] ?? '',
-    lockCode: json["lock_code"] ?? '',
-    activatedBy: json["activated_by"] ?? '',
-    mobilePicture: json["mobile_picture"] ?? '',
-    mobileType: json["mobile_type"] ?? '',
-    signature: json["signature"],
-    documents: json["documents"] ?? '',
-    note: json["note"],
-    suggestion: json["suggestion"],
-    createdBy: json["created_by"] ?? 0,
-    fosId: json["fos_id"] ?? 0,
-    retailerId: json["retailer_id"] ?? 0,
-    isDeleted: json["is_deleted"] ?? 0,
-    registerStatus: json["register_status"] ?? '',
-    registerTime: json["register_time"],
-    createdAt: json["created_at"] != null ? DateTime.parse(json["created_at"]) : DateTime.now(),
-    updatedAt: json["updated_at"] != null ? DateTime.parse(json["updated_at"]) : null,
-    isActive: _parseIsActive(json["is_active"]),
-    serialNo: json["serial_no"] ?? '',
-    fcmToken: json["fcm_token"] ?? '',
-    // New fields with null safety
-    actualDeviceStatus: json["actual_device_status"] ?? '',
-    longitude: json["longitude"]?.toString(),
-    latitude: json["latitude"]?.toString(),
-    actualDeviceStatusTime: json["actual_device_status_time"] ?? '',
-    simCount: json["sim_count"] ?? '',
-    sim1NetworkName: json["sim1_network_name"],
-    sim1Number: json["sim1_number"],
-    sim1CountryIso: json["sim1_country_iso"],
-    sim2NetworkName: json["sim2_network_name"],
-    sim2Number: json["sim2_number"],
-    sim2CountryIso: json["sim2_country_iso"],
-    networkType: json["network_type"],
-    mobileModel: json["mobile_model"],
-    uuid: json["uuid"] ?? '',
-    cnicFrontImage: json["cnic_front_image"] ?? '',
-    cnicBackImage: json["cnic_back_image"] ?? '',
-    profileImage: json["profile_image"] ?? '',
-    customerCode: json["customer_code"] ?? '',
-  );
+  factory Datum.fromJson(Map<String, dynamic> json) {
+    // Parse country - can be int, String, or Map with id/name
+    int countryId = 0;
+    String? countryName;
+    if (json["country"] is Map) {
+      countryId = json["country"]["id"] ?? 0;
+      countryName = json["country"]["name"];
+    } else if (json["country_id"] != null) {
+      countryId = _parseInt(json["country_id"]);
+      if (json["country"] is Map) {
+        countryName = json["country"]["name"];
+      }
+    } else {
+      countryId = _parseInt(json["country"]);
+    }
+    
+    // Parse state - can be int, String, or Map with id/name
+    int stateId = 0;
+    String? stateName;
+    if (json["state"] is Map) {
+      stateId = json["state"]["id"] ?? 0;
+      stateName = json["state"]["name"];
+    } else if (json["state_id"] != null) {
+      stateId = _parseInt(json["state_id"]);
+      if (json["state"] is Map) {
+        stateName = json["state"]["name"];
+      }
+    } else {
+      stateId = _parseInt(json["state"]);
+    }
+    
+    // Parse city - can be int, String, or Map with id/name
+    int cityId = 0;
+    String? cityName;
+    if (json["city"] is Map) {
+      cityId = json["city"]["id"] ?? 0;
+      cityName = json["city"]["name"];
+    } else if (json["city_id"] != null) {
+      cityId = _parseInt(json["city_id"]);
+      if (json["city"] is Map) {
+        cityName = json["city"]["name"];
+      }
+    } else {
+      cityId = _parseInt(json["city"]);
+    }
+    
+    // Parse created_by - can be int or Map with user_name/user_code
+    int createdById = 0;
+    String? createdByName;
+    String? createdByCode;
+    if (json["created_by"] is Map) {
+      createdByName = json["created_by"]["user_name"];
+      createdByCode = json["created_by"]["user_code"];
+    } else {
+      createdById = _parseInt(json["created_by"]);
+    }
+    
+    // Parse lock_status - can be bool or int
+    bool lockStatusValue = false;
+    if (json["lock_status"] is bool) {
+      lockStatusValue = json["lock_status"];
+    } else if (json["lock_status"] is int) {
+      lockStatusValue = json["lock_status"] == 1;
+    } else if (json["lock_status"] is String) {
+      lockStatusValue = json["lock_status"].toLowerCase() == 'true' || json["lock_status"] == '1';
+    }
+    
+    return Datum(
+      id: json["id"] ?? 0,
+      hashId: json["hash_id"],
+      customerCode: json["customer_code"] ?? '',
+      customerName: json["customer_name"] ?? '',
+      // Handle both old field (customer_mobile_no) and new field (contact_number)
+      customerMobileNo: json["contact_number"] ?? json["customer_mobile_no"] ?? '',
+      email: json["email"] ?? '',
+      cnic: json["cnic"] ?? '',
+      country: countryId,
+      state: stateId,
+      city: cityId,
+      countryName: countryName,
+      stateName: stateName,
+      cityName: cityName,
+      address: json["address"] ?? '',
+      googleMap: json["google_map"],
+      loanBy: json["loan_by"],
+      model: json["model"] ?? '',
+      imei1: json["imei_1"] ?? '',
+      imei2: json["imei_2"],
+      deviceStatus: json["device_status"] ?? '',
+      status: json["status"] ?? '',
+      lockCode: json["lock_code"] ?? '',
+      unlockCode: json["unlock_code"],
+      activatedBy: json["activated_by"] ?? '',
+      mobilePicture: json["mobile_picture"] ?? '',
+      mobileType: json["mobile_type"] ?? '',
+      signature: json["signature"],
+      documents: json["documents"] ?? '',
+      note: json["note"],
+      suggestion: json["suggestion"],
+      createdBy: createdById,
+      createdByName: createdByName,
+      createdByCode: createdByCode,
+      fosId: json["fos_id"] ?? 0,
+      retailerId: json["retailer_id"] ?? 0,
+      isDeleted: json["is_deleted"] ?? 0,
+      registerStatus: json["register_status"] ?? '',
+      registerTime: json["register_time"],
+      createdAt: json["created_at"] != null ? DateTime.parse(json["created_at"]) : DateTime.now(),
+      updatedAt: json["updated_at"] != null ? DateTime.parse(json["updated_at"]) : null,
+      isActive: _parseIsActive(json["is_active"]),
+      lockStatus: lockStatusValue,
+      serialNo: json["serial_no"] ?? '',
+      fcmToken: json["fcm_token"] ?? '',
+      // New fields with null safety
+      actualDeviceStatus: json["actual_device_status"] ?? '',
+      longitude: json["longitude"]?.toString(),
+      latitude: json["latitude"]?.toString(),
+      actualDeviceStatusTime: json["actual_device_status_time"] ?? '',
+      simCount: json["sim_count"] ?? '',
+      sim1NetworkName: json["sim1_network_name"],
+      sim1Number: json["sim1_number"],
+      sim1CountryIso: json["sim1_country_iso"],
+      sim2NetworkName: json["sim2_network_name"],
+      sim2Number: json["sim2_number"],
+      sim2CountryIso: json["sim2_country_iso"],
+      networkType: json["network_type"],
+      mobileModel: json["mobile_model"],
+      uuid: json["uuid"] ?? '',
+      cnicFrontImage: json["cnic_front_image"] ?? '',
+      cnicBackImage: json["cnic_back_image"] ?? '',
+      profileImage: json["profile_image"] ?? '',
+    );
+  }
 
   // Helper to parse is_active which can be int, String, or null
   static int _parseIsActive(dynamic value) {
@@ -355,13 +483,19 @@ class Datum {
 
   Map<String, dynamic> toJson() => {
     "id": id,
+    "hash_id": hashId,
+    "customer_code": customerCode,
     "customer_name": customerName,
+    "contact_number": customerMobileNo,
     "customer_mobile_no": customerMobileNo,
     "email": email,
     "cnic": cnic,
     "country": country,
+    "country_id": country,
     "state": state,
+    "state_id": state,
     "city": city,
+    "city_id": city,
     "address": address,
     "google_map": googleMap,
     "loan_by": loanBy,
@@ -371,6 +505,7 @@ class Datum {
     "device_status": deviceStatus,
     "status": status,
     "lock_code": lockCode,
+    "unlock_code": unlockCode,
     "activated_by": activatedBy,
     "mobile_picture": mobilePicture,
     "mobile_type": mobileType,
@@ -387,6 +522,7 @@ class Datum {
     "created_at": createdAt.toIso8601String(),
     "updated_at": updatedAt?.toIso8601String(),
     "is_active": isActive,
+    "lock_status": lockStatus,
     "serial_no": serialNo,
     "fcm_token": fcmToken,
     "actual_device_status": actualDeviceStatus,
@@ -406,12 +542,13 @@ class Datum {
     "cnic_front_image": cnicFrontImage,
     "cnic_back_image": cnicBackImage,
     "profile_image": profileImage,
-    "customer_code": customerCode,
   };
 
   /// Creates a copy of this Datum with the given fields replaced with new values
   Datum copyWith({
     int? id,
+    String? hashId,
+    String? customerCode,
     String? customerName,
     String? customerMobileNo,
     String? email,
@@ -419,6 +556,9 @@ class Datum {
     int? country,
     int? state,
     int? city,
+    String? countryName,
+    String? stateName,
+    String? cityName,
     String? address,
     String? googleMap,
     String? loanBy,
@@ -428,6 +568,7 @@ class Datum {
     String? deviceStatus,
     String? status,
     String? lockCode,
+    String? unlockCode,
     String? activatedBy,
     String? mobilePicture,
     String? mobileType,
@@ -436,6 +577,8 @@ class Datum {
     String? note,
     String? suggestion,
     int? createdBy,
+    String? createdByName,
+    String? createdByCode,
     int? fosId,
     int? retailerId,
     int? isDeleted,
@@ -444,6 +587,7 @@ class Datum {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? isActive,
+    bool? lockStatus,
     String? serialNo,
     String? fcmToken,
     String? actualDeviceStatus,
@@ -463,10 +607,11 @@ class Datum {
     String? cnicFrontImage,
     String? cnicBackImage,
     String? profileImage,
-    String? customerCode,
   }) {
     return Datum(
       id: id ?? this.id,
+      hashId: hashId ?? this.hashId,
+      customerCode: customerCode ?? this.customerCode,
       customerName: customerName ?? this.customerName,
       customerMobileNo: customerMobileNo ?? this.customerMobileNo,
       email: email ?? this.email,
@@ -474,6 +619,9 @@ class Datum {
       country: country ?? this.country,
       state: state ?? this.state,
       city: city ?? this.city,
+      countryName: countryName ?? this.countryName,
+      stateName: stateName ?? this.stateName,
+      cityName: cityName ?? this.cityName,
       address: address ?? this.address,
       googleMap: googleMap ?? this.googleMap,
       loanBy: loanBy ?? this.loanBy,
@@ -483,6 +631,7 @@ class Datum {
       deviceStatus: deviceStatus ?? this.deviceStatus,
       status: status ?? this.status,
       lockCode: lockCode ?? this.lockCode,
+      unlockCode: unlockCode ?? this.unlockCode,
       activatedBy: activatedBy ?? this.activatedBy,
       mobilePicture: mobilePicture ?? this.mobilePicture,
       mobileType: mobileType ?? this.mobileType,
@@ -491,6 +640,8 @@ class Datum {
       note: note ?? this.note,
       suggestion: suggestion ?? this.suggestion,
       createdBy: createdBy ?? this.createdBy,
+      createdByName: createdByName ?? this.createdByName,
+      createdByCode: createdByCode ?? this.createdByCode,
       fosId: fosId ?? this.fosId,
       retailerId: retailerId ?? this.retailerId,
       isDeleted: isDeleted ?? this.isDeleted,
@@ -499,6 +650,7 @@ class Datum {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
+      lockStatus: lockStatus ?? this.lockStatus,
       serialNo: serialNo ?? this.serialNo,
       fcmToken: fcmToken ?? this.fcmToken,
       actualDeviceStatus: actualDeviceStatus ?? this.actualDeviceStatus,
@@ -518,7 +670,6 @@ class Datum {
       cnicFrontImage: cnicFrontImage ?? this.cnicFrontImage,
       cnicBackImage: cnicBackImage ?? this.cnicBackImage,
       profileImage: profileImage ?? this.profileImage,
-      customerCode: customerCode ?? this.customerCode,
     );
   }
 }

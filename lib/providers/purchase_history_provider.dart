@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/purchase_history_model.dart';
 import '../util/app_constants.dart';
+import '../util/session_manager.dart';
 
 class PurchaseHistoryProvider with ChangeNotifier {
   // State variables
@@ -152,6 +153,7 @@ class PurchaseHistoryProvider with ChangeNotifier {
         }
       } else if (response.statusCode == 401) {
         debugPrint("Purchase History API unauthorized 401: ${response.body}");
+        await SessionManager.handleSessionExpiry(response.statusCode);
         purchaseHistoryModel = PurchaseHistoryModel(
           success: false,
           message: 'Unauthorized',

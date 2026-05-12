@@ -43,39 +43,48 @@ class _SplashScreenState extends State<SplashScreen> {
           // This ensures version check happens early
           await context.read<HomeProvider>().getAppVersion();
           
-          // Check for PIN code
-          final pinCode = await provider.getPinCode();
-          
+          // First check if PIN is already stored locally
+          final storedPin = await provider.getStoredPinCode();
+
           if (!mounted) return;
-          
-          if (pinCode == null) {
-            // API call failed, check stored PIN
-            final storedPin = await provider.getStoredPinCode();
-            if (storedPin != null && storedPin.isNotEmpty) {
-              // Has stored PIN, go to home
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-                (route) => false,
-              );
-            } else {
-              // No stored PIN and API failed, force PIN setup
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
-                (route) => false,
-              );
-            }
-          } else if (pinCode.isEmpty) {
-            // Pin code is not set, show update pin screen
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
-              (route) => false,
-            );
-          } else {
-            // Pin code exists, navigate to home screen
+
+          if (storedPin != null && storedPin.isNotEmpty) {
+            // Has stored PIN locally, go directly to home
+            debugPrint("PIN found in SharedPreferences, going to home");
             Navigator.of(context).pushAndRemoveUntil(
               MaterialPageRoute(builder: (context) => const HomeScreen()),
               (route) => false,
             );
+          } else {
+            // No local PIN, check API
+            debugPrint("No local PIN, checking API...");
+            final pinCode = await provider.getPinCode();
+
+            if (!mounted) return;
+
+            if (pinCode != null && pinCode.isNotEmpty) {
+              // API returned a PIN code (already stored by getPinCode), go to home
+              debugPrint("PIN found from API, going to home");
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            } else if (pinCode != null && pinCode.isEmpty) {
+              // API explicitly says PIN is not set, show update PIN screen
+              debugPrint("API says PIN not set, showing Update PIN screen");
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
+                (route) => false,
+              );
+            } else {
+              // API call failed (pinCode == null), go to home anyway
+              // Don't force PIN setup if API fails
+              debugPrint("API call failed, going to home anyway");
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                (route) => false,
+              );
+            }
           }
         }
       }

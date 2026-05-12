@@ -1,6 +1,6 @@
 import 'dart:convert';
-
 import 'package:deviceguardianadmin/providers/customer_provider.dart';
+import 'package:deviceguardianadmin/providers/profile_provider.dart';
 import 'package:deviceguardianadmin/util/app_constants.dart';
 import 'package:deviceguardianadmin/util/styles.dart';
 import 'package:deviceguardianadmin/widgets/custom_text_field_widget.dart';
@@ -79,60 +79,113 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     });
   }
 
-  /// Load user's default location from SharedPreferences (for new customer)
+  /// Load user's default location from ProfileProvider (for new customer)
   Future<void> _loadUserDefaultLocation(CustomerProvider provider) async {
-    final prefs = await SharedPreferences.getInstance();
+    debugPrint('=== LOADING USER DEFAULT LOCATION FOR NEW CUSTOMER ===');
     
-    // Parse location IDs from JSON objects (new format) or fallback to int (legacy format)
+    // Get location from ProfileProvider (logged-in user's profile)
+    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+    
     int userCountryId = 0;
     int userStateId = 0;
     int userCityId = 0;
-    
-    try {
-      final countryJson = prefs.getString('user_country');
-      if (countryJson != null && countryJson.isNotEmpty) {
-        final countryData = jsonDecode(countryJson);
-        userCountryId = countryData['id'] ?? 0;
-      }
-    } catch (e) {
-      // Fallback to legacy int format
-      userCountryId = prefs.getInt('user_country') ?? 0;
+
+    // Step 1: Check if profile data already exists in memory
+    if (profileProvider.profileData != null) {
+      debugPrint('Step 1: Profile data already in memory');
+      userCountryId = profileProvider.country.id;
+      userStateId = profileProvider.state.id;
+      userCityId = profileProvider.city.id;
+      debugPrint('  - From memory: Country=$userCountryId, State=$userStateId, City=$userCityId');
     }
-    
-    try {
-      final stateJson = prefs.getString('user_state');
-      if (stateJson != null && stateJson.isNotEmpty) {
-        final stateData = jsonDecode(stateJson);
-        userStateId = stateData['id'] ?? 0;
+
+    // Step 2: If no location in memory, try SharedPreferences directly (login data)
+    if (userCountryId == 0 && userStateId == 0 && userCityId == 0) {
+      debugPrint('Step 2: Loading from SharedPreferences (login data)...');
+      final prefs = await SharedPreferences.getInstance();
+
+      try {
+        final countryJson = prefs.getString('user_country');
+        debugPrint('  - user_country raw: $countryJson');
+        if (countryJson != null && countryJson.isNotEmpty) {
+          final countryData = jsonDecode(countryJson);
+          userCountryId = countryData['id'] ?? 0;
+          debugPrint('  - Parsed Country ID: $userCountryId');
+        }
+      } catch (e) {
+        debugPrint('  - Error parsing country: $e');
       }
-    } catch (e) {
-      // Fallback to legacy int format
-      userStateId = prefs.getInt('user_state') ?? 0;
-    }
-    
-    try {
-      final cityJson = prefs.getString('user_city');
-      if (cityJson != null && cityJson.isNotEmpty) {
-        final cityData = jsonDecode(cityJson);
-        userCityId = cityData['id'] ?? 0;
+
+      try {
+        final stateJson = prefs.getString('user_state');
+        debugPrint('  - user_state raw: $stateJson');
+        if (stateJson != null && stateJson.isNotEmpty) {
+          final stateData = jsonDecode(stateJson);
+          userStateId = stateData['id'] ?? 0;
+          debugPrint('  - Parsed State ID: $userStateId');
+        }
+      } catch (e) {
+        debugPrint('  - Error parsing state: $e');
       }
-    } catch (e) {
-      // Fallback to legacy int format
-      userCityId = prefs.getInt('user_city') ?? 0;
+
+      try {
+        final cityJson = prefs.getString('user_city');
+        debugPrint('  - user_city raw: $cityJson');
+        if (cityJson != null && cityJson.isNotEmpty) {
+          final cityData = jsonDecode(cityJson);
+          userCityId = cityData['id'] ?? 0;
+          debugPrint('  - Parsed City ID: $userCityId');
+        }
+      } catch (e) {
+        debugPrint('  - Error parsing city: $e');
+      }
     }
-    
-    debugPrint('Loading user default location - Country: $userCountryId, State: $userStateId, City: $userCityId');
-    
-    // First fetch countries, then set location by IDs
+
+    // Step 3: If still no data, try ProfileProvider's loadProfileDataFromPrefs
+    if (userCountryId == 0 && userStateId == 0 && userCityId == 0) {
+      debugPrint('Step 3: No data in SharedPreferences, trying ProfileProvider...');
+      await profileProvider.loadProfileDataFromPrefs();
+      userCountryId = profileProvider.country.id;
+      userStateId = profileProvider.state.id;
+      userCityId = profileProvider.city.id;
+      debugPrint('  - From ProfileProvider: Country=$userCountryId, State=$userStateId, City=$userCityId');
+    }
+
+    // Step 4: If still no location data, fetch from API
+    if (userCountryId == 0 && userStateId == 0 && userCityId == 0) {
+      debugPrint('Step 4: No location found, fetching from API...');
+      await profileProvider.fetchProfileData();
+      userCountryId = profileProvider.country.id;
+      userStateId = profileProvider.state.id;
+      userCityId = profileProvider.city.id;
+      debugPrint('  - From API: Country=$userCountryId, State=$userStateId, City=$userCityId');
+    }
+
+    debugPrint('Step 5: Final Location IDs to use:');
+    debugPrint('  - Country ID: $userCountryId');
+    debugPrint('  - State ID: $userStateId');
+    debugPrint('  - City ID: $userCityId');
+
+    // Fetch countries, then set location by IDs
+    debugPrint('Step 6: Fetching countries list...');
     await provider.fetchCountries();
+    debugPrint('  - Countries loaded: ${provider.countries.length} available');
     
     if (userCountryId != 0 || userStateId != 0 || userCityId != 0) {
+      debugPrint('Step 7: Setting location by IDs...');
       await provider.setLocationByIds(
         countryId: userCountryId,
         stateId: userStateId,
         cityId: userCityId,
       );
+      debugPrint('Step 8: Location set successfully!');
+      debugPrint('  - Selected Country: ${provider.selectedCountry?.name} (ID: ${provider.selectedCountry?.id})');
+      debugPrint('  - Selected State: ${provider.selectedState?.name} (ID: ${provider.selectedState?.id})');
+      debugPrint('  - Selected City: ${provider.selectedCity?.name} (ID: ${provider.selectedCity?.id})');
+    } else {
+      debugPrint('Step 7: No location IDs found, dropdowns will be empty');
     }
+    debugPrint('======================================================');
   }
 
   @override
@@ -612,6 +665,40 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                         ),
                                         const SizedBox(height: Dimensions.paddingSizeDefault),
                                         
+                                        // Info banner for pre-filled location (only in ADD mode)
+                                        if (!isEditMode)
+                                          Container(
+                                            margin: const EdgeInsets.only(bottom: Dimensions.paddingSizeDefault),
+                                            padding: const EdgeInsets.all(Dimensions.paddingSizeSmall),
+                                            decoration: BoxDecoration(
+                                              color: Theme.of(context).primaryColor.withOpacity(0.1),
+                                              borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                                              border: Border.all(
+                                                color: Theme.of(context).primaryColor.withOpacity(0.3),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                  Icons.info_outline,
+                                                  color: Theme.of(context).primaryColor,
+                                                  size: 20,
+                                                ),
+                                                const SizedBox(width: Dimensions.paddingSizeSmall),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Location pre-filled from your profile. You can change if needed.\nمقام آپ کے پروفائل سے پہلے سے بھرا ہوا ہے۔ ضرورت ہو تو تبدیل کر سکتے ہیں۔',
+                                                    style: robotoRegular(context).copyWith(
+                                                      fontSize: Dimensions.fontSizeExtraSmall(context),
+                                                      color: Theme.of(context).primaryColor,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        
                                         // Country Dropdown
                                         Consumer<CustomerProvider>(
                                           builder: (context, provider, child) {
@@ -972,17 +1059,6 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                           },
                                         ),
                                         _buildMobilePicturesGrid(),
-                                        
-                                        _buildImagePickerSection(
-                                          context,
-                                          title: "Documents دستاویزات",
-                                          icon: CupertinoIcons.doc,
-                                          onTap: () {
-                                            Provider.of<CustomerProvider>(context, listen: false)
-                                                .showImageSourceDialog(context, isMobilePicture: false);
-                                          },
-                                        ),
-                                        _buildDocumentsGrid(),
                                       ],
                                     ),
                                   ],
@@ -1376,47 +1452,6 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
     );
   }
 
-  Widget _buildDocumentsGrid() {
-    return Consumer<CustomerProvider>(
-      builder: (context, customerProvider, child) {
-        if (customerProvider.existingDocuments.isEmpty && customerProvider.documents.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return Padding(
-          padding: const EdgeInsets.only(top: Dimensions.paddingSizeDefault),
-          child: DottedBorder(
-            color: Theme.of(context).primaryColor,
-            strokeWidth: 2,
-            dashPattern: const [8, 4],
-            borderType: BorderType.RRect,
-            radius: const Radius.circular(Dimensions.radiusDefault),
-            padding: const EdgeInsets.all(12),
-            child: SizedBox(
-              width: double.infinity,
-              child: Wrap(
-                spacing: Dimensions.paddingSizeDefault,
-                runSpacing: Dimensions.paddingSizeDefault,
-                children: [
-                  ...customerProvider.existingDocuments.asMap().entries.map((entry) {
-                    return _buildImageItem(
-                      imageUrl: '${AppConstants.imageUrl}${entry.value}',
-                      onRemove: () => customerProvider.removeExistingDocument(entry.key),
-                    );
-                  }),
-                  ...customerProvider.documents.asMap().entries.map((entry) {
-                    return _buildFileImageItem(
-                      file: entry.value,
-                      onRemove: () => customerProvider.removeDocument(entry.key),
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   Widget _buildImageItem({required String imageUrl, required VoidCallback onRemove}) {
     return Stack(
@@ -1533,7 +1568,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
               Text(
                 isEditMode
                     ? 'Updating customer...'
-                    : 'Uploading ${(customerProvider.profilePicture != null ? 1 : 0) + customerProvider.mobilePictures.length + customerProvider.documents.length} files...',
+                    : 'Uploading ${(customerProvider.profilePicture != null ? 1 : 0) + (customerProvider.frontCnicPicture != null ? 1 : 0) + (customerProvider.backCnicPicture != null ? 1 : 0) + customerProvider.mobilePictures.length} files...',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ],
@@ -1549,14 +1584,25 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
       final selectedStateId = customerProvider.selectedState?.id ?? 0;
       final selectedCityId = customerProvider.selectedCity?.id ?? 0;
       
-      // DEBUG: Log the values being sent
-      debugPrint('=== ADD/EDIT CUSTOMER SCREEN DEBUG ===');
-      debugPrint('isEditMode: $isEditMode');
-      debugPrint('_selectedMobileType: $_selectedMobileType');
-      debugPrint('mobileModelController.text: ${mobileModelController.text}');
-      debugPrint('mobileModel (trimmed): ${mobileModelController.text.trim()}');
-      debugPrint('======================================');
-      
+      // DEBUG: Log the values being sent to API
+      debugPrint('=== ADD/EDIT CUSTOMER - API REQUEST DATA ===');
+      debugPrint('Mode: ${isEditMode ? 'EDIT' : 'ADD'}');
+      debugPrint('Customer Name: ${nameController.text.trim()}');
+      debugPrint('Phone: $phoneWithCountryCode');
+      debugPrint('Email: ${emailController.text.trim()}');
+      debugPrint('CNIC: ${cnicController.text.trim()}');
+      debugPrint('----- LOCATION IDs -----');
+      debugPrint('Country ID: $selectedCountryId (${customerProvider.selectedCountry?.name ?? 'None'})');
+      debugPrint('State ID: $selectedStateId (${customerProvider.selectedState?.name ?? 'None'})');
+      debugPrint('City ID: $selectedCityId (${customerProvider.selectedCity?.name ?? 'None'})');
+      debugPrint('----- DEVICE INFO -----');
+      debugPrint('Mobile Type: $_selectedMobileType');
+      debugPrint('Mobile Model: ${mobileModelController.text.trim()}');
+      debugPrint('IMEI-1: ${imei1Controller.text.trim()}');
+      debugPrint('IMEI-2: ${customerProvider.imeiCount == 2 ? imei2Controller.text.trim() : 'N/A'}');
+      debugPrint('IMEI Type: ${(customerProvider.imeiCount == 2 && imei2Controller.text.trim().isNotEmpty) ? 'dual' : 'single'}');
+      debugPrint('==========================================');
+
       final result = isEditMode
           ? await customerProvider.updateUserDevice(
               customerId: widget.customerId!,

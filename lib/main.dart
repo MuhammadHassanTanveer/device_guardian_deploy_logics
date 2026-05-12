@@ -8,6 +8,7 @@ import 'package:deviceguardianadmin/providers/registration_provider.dart';
 import 'package:deviceguardianadmin/screens/splash_screen.dart';
 import 'package:deviceguardianadmin/theme/light_theme.dart';
 import 'package:deviceguardianadmin/util/notification_services.dart';
+import 'package:deviceguardianadmin/util/session_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +63,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (ctx) => PurchaseHistoryProvider(),),
       ],
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         title: 'Device Guardian Admin',
         theme: light,

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../models/login_model.dart';
 import '../util/app_constants.dart';
+import '../util/session_manager.dart';
 
 class LoginProvider with ChangeNotifier {
   bool isLoading = false;
@@ -306,6 +307,10 @@ class LoginProvider with ChangeNotifier {
           debugPrint("getPinCode: API returned success/status=false");
           return null;
         }
+      } else if (response.statusCode == 401) {
+        debugPrint("getPinCode: Session expired (401)");
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return null;
       } else {
         debugPrint("getPinCode: API returned status ${response.statusCode}");
         return null;
@@ -381,6 +386,7 @@ class LoginProvider with ChangeNotifier {
         }
       } else if (response.statusCode == 401) {
         // Unauthorized - token expired or invalid
+        await SessionManager.handleSessionExpiry(response.statusCode);
         errorMessage = 'Session expired. Please login again.';
         debugPrint("updatePin: Unauthorized - Token may be expired");
         isLoading = false;
@@ -414,11 +420,69 @@ class LoginProvider with ChangeNotifier {
     return _pinCode;
   }
 
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.clear();
-    _pinCode = null;
-    notifyListeners();
+  /// Logout user - calls API and clears all local data
+  Future<bool> logout() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+
+      debugPrint("=== LOGOUT PROCESS STARTED ===");
+
+      // Call logout API if token exists
+      if (token.isNotEmpty) {
+        try {
+          debugPrint("Calling logout API...");
+          final response = await http.post(
+            Uri.parse('${AppConstants.baseUrl}/mobile/logout'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          );
+
+          debugPrint("Logout API Response Status: ${response.statusCode}");
+          debugPrint("Logout API Response: ${response.body}");
+
+          // Continue with local cleanup even if API call fails
+          // This ensures user can logout even if network is down
+        } catch (apiError) {
+          debugPrint("Logout API Error (continuing with local cleanup): $apiError");
+          // Don't return false here - continue with local cleanup
+        }
+      } else {
+        debugPrint("No auth token found, skipping API call");
+      }
+
+      // Clear all SharedPreferences data
+      debugPrint("Clearing all SharedPreferences data...");
+      await prefs.clear();
+
+      // Clear local provider data
+      _pinCode = null;
+      _userData = null;
+      errorMessage = null;
+
+      debugPrint("=== LOGOUT COMPLETED SUCCESSFULLY ===");
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint("Logout error: $e");
+
+      // Even on error, try to clear local data
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.clear();
+        _pinCode = null;
+        _userData = null;
+        errorMessage = null;
+        notifyListeners();
+      } catch (clearError) {
+        debugPrint("Error clearing local data: $clearError");
+      }
+
+      return false;
+    }
   }
 
   void clearError() {

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../util/app_constants.dart';
+import '../util/session_manager.dart';
 import '../models/customer_model.dart';
 import '../models/customer_emi_model.dart';
 import '../models/location_model.dart';
@@ -416,7 +417,7 @@ class CustomerProvider with ChangeNotifier {
     File? frontCnicPicture,
     File? backCnicPicture,
     required List<File> mobilePictures,
-    required List<File> documents,
+    required List<File> documents,  // Keeping for backward compatibility but won't be sent
   }) async
   {
     const int maxRetries = 3;
@@ -435,68 +436,68 @@ class CustomerProvider with ChangeNotifier {
 
     while (retryCount < maxRetries) {
       try {
-        final url = Uri.parse('${AppConstants.baseUrl}/register_user_device_api');
+        // New API endpoint
+        final url = Uri.parse('${AppConstants.baseUrl}/mobile/customers');
 
         var request = http.MultipartRequest('POST', url);
         
         // Add headers with auth token
+        // Note: Do NOT set Content-Type for multipart requests - the http package handles it automatically
         request.headers.addAll({
           'Accept': 'application/json',
-          'Content-Type': 'application/form-data',
           'Authorization': 'Bearer $authToken',
         });
         
-        // Add text fields
+        // Add text fields with new field names
         request.fields['customer_name'] = customerName;
+        request.fields['contact_number'] = customerMobileNo;
         request.fields['email'] = email;
-        request.fields['cnic'] = cnic;
-        request.fields['customer_mobile_no'] = customerMobileNo;
-        // Database requires these fields to be non-null, so we send placeholder values
-        request.fields['loan_by'] = '';
-        request.fields['type'] = '';
-        request.fields['model'] = '';
+        request.fields['cnic_number'] = cnic;
+        request.fields['address'] = address;
+        request.fields['country_id'] = countryId.toString();
+        request.fields['state_id'] = stateId.toString();
+        request.fields['city_id'] = cityId.toString();
+        
+        // Add IMEI type based on whether imei2 is provided
+        request.fields['imei_type'] = (imei2 != null && imei2.isNotEmpty) ? 'dual' : 'single';
         request.fields['imei_1'] = imei1 ?? '';
-        // Only include imei_2 if it's provided (double IMEI)
+        
+        // Only include imei_2 if it's provided (dual IMEI)
         if (imei2 != null && imei2.isNotEmpty) {
           request.fields['imei_2'] = imei2;
         }
-        request.fields['address'] = address;
-        request.fields['country'] = countryId.toString();
-        request.fields['city'] = cityId.toString();
-        request.fields['state'] = stateId.toString();
-        // Add mobile type and mobile model
+        
+        // Add mobile type and mobile model (lowercase for API compatibility)
         if (mobileType != null && mobileType.isNotEmpty) {
-          request.fields['mobile_type'] = mobileType;
+          request.fields['mobile_type'] = mobileType.toLowerCase();
         }
         if (mobileModel != null && mobileModel.isNotEmpty) {
           request.fields['mobile_model'] = mobileModel;
         }
 
         // DEBUG: Log the payload for ADD CUSTOMER
-        debugPrint('=== ADD CUSTOMER PAYLOAD ===');
+        debugPrint('=== ADD CUSTOMER PAYLOAD (NEW API) ===');
         debugPrint('URL: $url');
         request.fields.forEach((key, value) {
           debugPrint('$key: $value');
         });
-        debugPrint('mobileType param: $mobileType');
-        debugPrint('mobileModel param: $mobileModel');
         debugPrint('============================');
 
-        // Add profile picture (customer picture)
+        // Add customer_image (profile picture)
         if (profilePicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
-              'profile_image',
+              'customer_image',
               profilePicture.path,
             );
             request.files.add(multipartFile);
-            debugPrint('Added profile_image: ${profilePicture.path}');
+            debugPrint('Added customer_image: ${profilePicture.path}');
           } catch (e) {
-            debugPrint('Error adding profile_image: $e');
+            debugPrint('Error adding customer_image: $e');
           }
         }
 
-        // Add front CNIC picture
+        // Add cnic_front_image
         if (frontCnicPicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
@@ -510,7 +511,7 @@ class CustomerProvider with ChangeNotifier {
           }
         }
 
-        // Add back CNIC picture
+        // Add cnic_back_image
         if (backCnicPicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
@@ -524,37 +525,26 @@ class CustomerProvider with ChangeNotifier {
           }
         }
 
-        // Add mobile pictures - use array field name for multiple files
+        // Add mobile_images[] - multiple mobile pictures
         for (var i = 0; i < mobilePictures.length; i++) {
           var file = mobilePictures[i];
           try {
             var multipartFile = await http.MultipartFile.fromPath(
-              'mobile_picture[]',
+              'mobile_images[]',
               file.path,
             );
             request.files.add(multipartFile);
+            debugPrint('Added mobile_images[$i]: ${file.path}');
           } catch (e) {
-            debugPrint('Error adding mobile picture ${i + 1}: $e');
+            debugPrint('Error adding mobile_images[$i]: $e');
           }
         }
 
-        // Add documents - use array field name for multiple files
-        for (var i = 0; i < documents.length; i++) {
-          var file = documents[i];
-          try {
-            var multipartFile = await http.MultipartFile.fromPath(
-              'documents[]',
-              file.path,
-            );
-            request.files.add(multipartFile);
-          } catch (e) {
-            debugPrint('Error adding document ${i + 1}: $e');
-          }
-        }
+        // Note: documents are NOT sent to the new API as per requirements
 
         // Calculate and log file sizes
         double totalSizeMB = getTotalFileSizeMB();
-        debugPrint('Sending request with ${profilePicture != null ? 1 : 0} profile picture, ${mobilePictures.length} mobile pictures and ${documents.length} documents');
+        debugPrint('Sending request with ${profilePicture != null ? 1 : 0} profile picture and ${mobilePictures.length} mobile pictures');
         debugPrint('Request size: ${request.fields.length} fields, ${request.files.length} files');
         debugPrint('Total file size: ${totalSizeMB.toStringAsFixed(2)} MB');
         
@@ -581,7 +571,7 @@ class CustomerProvider with ChangeNotifier {
         );
 
         debugPrint('API Response Status: ${response.statusCode}');
-        debugPrint('API Response Body: ${response.body.substring(0, response.body.length > 500 ? 500 : response.body.length)}');
+        debugPrint('API Response Body: ${response.body}');
 
         if (response.statusCode == 200 || response.statusCode == 201) {
           try {
@@ -599,21 +589,68 @@ class CustomerProvider with ChangeNotifier {
           }
         } else if (response.statusCode == 401) {
           // Unauthorized - Token expired or invalid
-          return {
-            'success': false,
-            'error': 'Session expired. Please login again.',
-          };
+          await SessionManager.handleSessionExpiry(response.statusCode);
+          return SessionManager.sessionExpiredResponse();
         } else if (response.statusCode == 408) {
           return {
             'success': false,
             'error': 'Request timeout: The server timed out waiting for the request. This may be due to large file sizes or slow internet connection. Please try:\n1. Reducing the number of images\n2. Using smaller image files\n3. Checking your internet connection speed',
           };
+        } else if (response.statusCode == 422) {
+          // Validation error - parse and display the actual errors
+          debugPrint('=== 422 VALIDATION ERROR ===');
+          debugPrint('Full response body: ${response.body}');
+          try {
+            final errorData = json.decode(response.body);
+            String errorMessage = 'Validation failed:\n';
+            
+            // Handle Laravel validation error format
+            if (errorData['errors'] != null && errorData['errors'] is Map) {
+              final errors = errorData['errors'] as Map;
+              errors.forEach((field, messages) {
+                if (messages is List) {
+                  for (var msg in messages) {
+                    errorMessage += '• $msg\n';
+                  }
+                } else {
+                  errorMessage += '• $field: $messages\n';
+                }
+              });
+            } else if (errorData['message'] != null) {
+              errorMessage = errorData['message'].toString();
+            } else {
+              errorMessage = 'Validation failed. Please check all required fields.';
+            }
+            
+            debugPrint('Parsed error message: $errorMessage');
+            return {
+              'success': false,
+              'error': errorMessage.trim(),
+            };
+          } catch (e) {
+            debugPrint('Error parsing 422 response: $e');
+            return {
+              'success': false,
+              'error': 'Validation failed: ${response.body}',
+            };
+          }
         } else {
-          return {
-            'success': false,
-            'error': 'Failed to register: ${response.statusCode}',
-            'message': response.body,
-          };
+          // Other error status codes
+          debugPrint('=== API ERROR ${response.statusCode} ===');
+          debugPrint('Full response body: ${response.body}');
+          try {
+            final errorData = json.decode(response.body);
+            String errorMessage = errorData['message'] ?? 'Failed to register customer';
+            return {
+              'success': false,
+              'error': errorMessage,
+            };
+          } catch (e) {
+            return {
+              'success': false,
+              'error': 'Failed to register: ${response.statusCode} - ${response.body}',
+            };
+          }
         }
       } on SocketException catch (e) {
         retryCount++;
@@ -712,70 +749,74 @@ class CustomerProvider with ChangeNotifier {
 
     while (retryCount < maxRetries) {
       try {
-        final url = Uri.parse('${AppConstants.baseUrl}/update_user_device_api?customer_id=$customerId');
+        // New API endpoint for updating customers
+        final url = Uri.parse('${AppConstants.baseUrl}/mobile/customers/$customerId');
 
         debugPrint('Update Customer API URL: $url');
 
         var request = http.MultipartRequest('POST', url);
+        
+        // Add _method for Laravel to recognize this as PUT
+        request.fields['_method'] = 'PUT';
 
         // Add headers with auth token
+        // Note: Do NOT set Content-Type for multipart requests - the http package handles it automatically
         request.headers.addAll({
           'Accept': 'application/json',
-          'Content-Type': 'application/form-data',
           'Authorization': 'Bearer $authToken',
         });
 
-        // Add text fields
+        // Add text fields with new field names
         request.fields['customer_name'] = customerName;
+        request.fields['contact_number'] = customerMobileNo;
         request.fields['email'] = email;
-        request.fields['cnic'] = cnic;
-        request.fields['customer_mobile_no'] = customerMobileNo;
-        request.fields['loan_by'] = '';
-        request.fields['type'] = '';
-        request.fields['model'] = '';
+        request.fields['cnic_number'] = cnic;
+        request.fields['address'] = address;
+        request.fields['country_id'] = countryId.toString();
+        request.fields['state_id'] = stateId.toString();
+        request.fields['city_id'] = cityId.toString();
+        
+        // Add IMEI type based on whether imei2 is provided
+        request.fields['imei_type'] = (imei2 != null && imei2.isNotEmpty) ? 'dual' : 'single';
         request.fields['imei_1'] = imei1 ?? '';
+        
         // Only include imei_2 if it's provided
         if (imei2 != null && imei2.isNotEmpty) {
           request.fields['imei_2'] = imei2;
         }
-        request.fields['address'] = address;
-        request.fields['country'] = countryId.toString();
-        request.fields['city'] = cityId.toString();
-        request.fields['state'] = stateId.toString();
-        // Add mobile type and mobile model
+        
+        // Add mobile type and mobile model (lowercase for API compatibility)
         if (mobileType != null && mobileType.isNotEmpty) {
-          request.fields['mobile_type'] = mobileType;
+          request.fields['mobile_type'] = mobileType.toLowerCase();
         }
         if (mobileModel != null && mobileModel.isNotEmpty) {
           request.fields['mobile_model'] = mobileModel;
         }
 
         // DEBUG: Log the payload for UPDATE CUSTOMER
-        debugPrint('=== UPDATE CUSTOMER PAYLOAD ===');
+        debugPrint('=== UPDATE CUSTOMER PAYLOAD (NEW API) ===');
         debugPrint('URL: $url');
         debugPrint('Customer ID: $customerId');
         request.fields.forEach((key, value) {
           debugPrint('$key: $value');
         });
-        debugPrint('mobileType param: $mobileType');
-        debugPrint('mobileModel param: $mobileModel');
         debugPrint('===============================');
 
-        // Add profile picture (customer picture)
+        // Add customer_image (profile picture)
         if (profilePicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
-              'profile_image',
+              'customer_image',
               profilePicture.path,
             );
             request.files.add(multipartFile);
-            debugPrint('Added profile_image: ${profilePicture.path}');
+            debugPrint('Added customer_image: ${profilePicture.path}');
           } catch (e) {
-            debugPrint('Error adding profile_image: $e');
+            debugPrint('Error adding customer_image: $e');
           }
         }
 
-        // Add front CNIC picture
+        // Add cnic_front_image
         if (frontCnicPicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
@@ -789,7 +830,7 @@ class CustomerProvider with ChangeNotifier {
           }
         }
 
-        // Add back CNIC picture
+        // Add cnic_back_image
         if (backCnicPicture != null) {
           try {
             var multipartFile = await http.MultipartFile.fromPath(
@@ -807,84 +848,48 @@ class CustomerProvider with ChangeNotifier {
         debugPrint('=== UPDATE IMAGE STATE DEBUG ===');
         debugPrint('Profile picture: ${profilePicture != null ? 'Yes' : 'No'}');
         debugPrint('Existing mobile pictures: ${existingMobilePictures.length} items');
-        debugPrint('Existing mobile pictures paths: $existingMobilePictures');
-        debugPrint('Existing documents: ${existingDocuments.length} items');
-        debugPrint('Existing documents paths: $existingDocuments');
         debugPrint('New mobile pictures to upload: ${mobilePictures.length} files');
-        debugPrint('New documents to upload: ${documents.length} files');
         debugPrint('Removed mobile pictures: ${removedMobilePictures.length} items');
-        debugPrint('Removed mobile pictures paths: $removedMobilePictures');
-        debugPrint('Removed documents: ${removedDocuments.length} items');
-        debugPrint('Removed documents paths: $removedDocuments');
         debugPrint('================================');
 
         // Add existing mobile pictures paths (images that are not removed)
         if (existingMobilePictures.isNotEmpty) {
-          // Send as array fields like new images, but as paths
           for (var i = 0; i < existingMobilePictures.length; i++) {
-            request.fields['existing_mobile_pictures[$i]'] = existingMobilePictures[i];
+            request.fields['existing_mobile_images[$i]'] = existingMobilePictures[i];
           }
           debugPrint('✅ Keeping ${existingMobilePictures.length} existing mobile pictures');
         } else {
           debugPrint('⚠️ No existing mobile pictures to keep');
         }
 
-        // Add existing documents paths (documents that are not removed)
-        if (existingDocuments.isNotEmpty) {
-          // Send as array fields like new images, but as paths
-          for (var i = 0; i < existingDocuments.length; i++) {
-            request.fields['existing_documents[$i]'] = existingDocuments[i];
-          }
-          debugPrint('✅ Keeping ${existingDocuments.length} existing documents');
-        } else {
-          debugPrint('⚠️ No existing documents to keep');
-        }
-
-        // Add mobile pictures - use array field name for multiple files
+        // Add new mobile_images[] - multiple mobile pictures
         for (var i = 0; i < mobilePictures.length; i++) {
           var file = mobilePictures[i];
           try {
             var multipartFile = await http.MultipartFile.fromPath(
-              'mobile_picture[]',
+              'mobile_images[]',
               file.path,
             );
             request.files.add(multipartFile);
+            debugPrint('Added mobile_images[$i]: ${file.path}');
           } catch (e) {
-            debugPrint('Error adding mobile picture ${i + 1}: $e');
+            debugPrint('Error adding mobile_images[$i]: $e');
           }
         }
 
-        // Add documents - use array field name for multiple files
-        for (var i = 0; i < documents.length; i++) {
-          var file = documents[i];
-          try {
-            var multipartFile = await http.MultipartFile.fromPath(
-              'documents[]',
-              file.path,
-            );
-            request.files.add(multipartFile);
-          } catch (e) {
-            debugPrint('Error adding document ${i + 1}: $e');
-          }
-        }
+        // Note: documents are NOT sent to the new API as per requirements
 
-        // Add removed images if any - send as array fields
+        // Add removed mobile images if any
         if (removedMobilePictures.isNotEmpty) {
           for (var i = 0; i < removedMobilePictures.length; i++) {
-            request.fields['removed_mobile_pictures[$i]'] = removedMobilePictures[i];
+            request.fields['removed_mobile_images[$i]'] = removedMobilePictures[i];
           }
           debugPrint('🗑️ Removing ${removedMobilePictures.length} mobile pictures');
         }
-        if (removedDocuments.isNotEmpty) {
-          for (var i = 0; i < removedDocuments.length; i++) {
-            request.fields['removed_documents[$i]'] = removedDocuments[i];
-          }
-          debugPrint('🗑️ Removing ${removedDocuments.length} documents');
-        }
 
         double totalSizeMB = getTotalFileSizeMB();
-        debugPrint('Updating customer with ${mobilePictures.length} mobile pictures and ${documents.length} documents');
-        debugPrint('Removed: ${removedMobilePictures.length} mobile pictures, ${removedDocuments.length} documents');
+        debugPrint('Updating customer with ${mobilePictures.length} new mobile pictures');
+        debugPrint('Removed: ${removedMobilePictures.length} mobile pictures');
         debugPrint('Total file size: ${totalSizeMB.toStringAsFixed(2)} MB');
 
         // DEBUG: Print COMPLETE payload
@@ -909,7 +914,7 @@ class CustomerProvider with ChangeNotifier {
 
         // Print all fields in organized groups
         debugPrint('║ 📝 CUSTOMER INFORMATION:');
-        ['customer_name', 'email', 'cnic', 'customer_mobile_no', 'address', 'city', 'state', 'country'].forEach((key) {
+        ['customer_name', 'email', 'cnic_number', 'contact_number', 'address', 'city_id', 'state_id', 'country_id'].forEach((key) {
           if (request.fields.containsKey(key)) {
             debugPrint('║   $key: ${request.fields[key]}');
           }
@@ -917,7 +922,7 @@ class CustomerProvider with ChangeNotifier {
 
         debugPrint('║');
         debugPrint('║ 📱 DEVICE INFORMATION:');
-        ['imei_1', 'imei_2', 'model', 'type', 'loan_by'].forEach((key) {
+        ['imei_1', 'imei_2', 'imei_type', 'mobile_model', 'mobile_type'].forEach((key) {
           if (request.fields.containsKey(key)) {
             debugPrint('║   $key: ${request.fields[key]}');
           }
@@ -1034,21 +1039,68 @@ class CustomerProvider with ChangeNotifier {
             };
           }
         } else if (response.statusCode == 401) {
-          return {
-            'success': false,
-            'error': 'Session expired. Please login again.',
-          };
+          await SessionManager.handleSessionExpiry(response.statusCode);
+          return SessionManager.sessionExpiredResponse();
         } else if (response.statusCode == 408) {
           return {
             'success': false,
             'error': 'Request timeout. Please try reducing file sizes.',
           };
+        } else if (response.statusCode == 422) {
+          // Validation error - parse and display the actual errors
+          debugPrint('=== 422 VALIDATION ERROR (UPDATE) ===');
+          debugPrint('Full response body: ${response.body}');
+          try {
+            final errorData = json.decode(response.body);
+            String errorMessage = 'Validation failed:\n';
+            
+            // Handle Laravel validation error format
+            if (errorData['errors'] != null && errorData['errors'] is Map) {
+              final errors = errorData['errors'] as Map;
+              errors.forEach((field, messages) {
+                if (messages is List) {
+                  for (var msg in messages) {
+                    errorMessage += '• $msg\n';
+                  }
+                } else {
+                  errorMessage += '• $field: $messages\n';
+                }
+              });
+            } else if (errorData['message'] != null) {
+              errorMessage = errorData['message'].toString();
+            } else {
+              errorMessage = 'Validation failed. Please check all required fields.';
+            }
+            
+            debugPrint('Parsed error message: $errorMessage');
+            return {
+              'success': false,
+              'error': errorMessage.trim(),
+            };
+          } catch (e) {
+            debugPrint('Error parsing 422 response: $e');
+            return {
+              'success': false,
+              'error': 'Validation failed: ${response.body}',
+            };
+          }
         } else {
-          return {
-            'success': false,
-            'error': 'Failed to update: ${response.statusCode}',
-            'message': response.body,
-          };
+          // Other error status codes
+          debugPrint('=== API ERROR ${response.statusCode} ===');
+          debugPrint('Full response body: ${response.body}');
+          try {
+            final errorData = json.decode(response.body);
+            String errorMessage = errorData['message'] ?? 'Failed to update customer';
+            return {
+              'success': false,
+              'error': errorMessage,
+            };
+          } catch (e) {
+            return {
+              'success': false,
+              'error': 'Failed to update: ${response.statusCode} - ${response.body}',
+            };
+          }
         }
       } on SocketException catch (e) {
         retryCount++;
@@ -1191,6 +1243,7 @@ class CustomerProvider with ChangeNotifier {
         }
       } else if (response.statusCode == 401) {
         debugPrint("Single Customer API unauthorized 401: ${response.body}");
+        await SessionManager.handleSessionExpiry(response.statusCode);
       } else {
         debugPrint("Single Customer API error ${response.statusCode}: ${response.body}");
       }
@@ -1277,6 +1330,14 @@ class CustomerProvider with ChangeNotifier {
   // Current filter and search values for API calls
   String _currentFilter = 'all';
   String _currentSearch = '';
+  String _currentMobileType = 'android'; // Default to android
+  int _perPage = 10;
+
+  // Getters for filter values
+  String get currentFilter => _currentFilter;
+  String get currentSearch => _currentSearch;
+  String get currentMobileType => _currentMobileType;
+  int get perPage => _perPage;
 
   // Setters for filter and search
   void setFilter(String filter) {
@@ -1287,14 +1348,25 @@ class CustomerProvider with ChangeNotifier {
     _currentSearch = search;
   }
 
+  void setMobileType(String mobileType) {
+    _currentMobileType = mobileType;
+  }
+
+  void setPerPage(int value) {
+    _perPage = value;
+  }
+
   // Public function to fetch customers from API - following sample pattern
-  Future<bool> fetchCustomers(BuildContext context, {bool isRefresh = false, String? filter, String? search}) async {
-    // Update filter and search if provided
+  Future<bool> fetchCustomers(BuildContext context, {bool isRefresh = false, String? filter, String? search, String? mobileType}) async {
+    // Update filter, search, and mobileType if provided
     if (filter != null) {
       _currentFilter = filter;
     }
     if (search != null) {
       _currentSearch = search;
+    }
+    if (mobileType != null) {
+      _currentMobileType = mobileType;
     }
 
     if (isRefresh) {
@@ -1312,17 +1384,15 @@ class CustomerProvider with ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      // Support user_id stored as either int or String; parse safely with fallback
-      String? userId;
-      userId = prefs.getString('user_id');
 
       // Get auth token for authorized requests (may be empty; server will handle 401)
       final authToken = prefs.getString('auth_token') ?? '';
 
       debugPrint("=== Fetch Customers Debug ===");
-      debugPrint("Retrieved user_id from SharedPreferences: $userId");
       debugPrint("Retrieved auth_token from SharedPreferences: ${authToken.isNotEmpty ? 'Token present (${authToken.length} chars)' : 'Token MISSING'}");
-      final url = '${AppConstants.baseUrl}/get_user_devices_api?user_id=$userId&page=$pageIndex&filter=$_currentFilter&search=$_currentSearch';
+      
+      // Build the new API URL with query parameters
+      final url = '${AppConstants.baseUrl}/mobile/customers?search=$_currentSearch&filter=$_currentFilter&mobile_type=$_currentMobileType&page=$pageIndex&per_page=$_perPage';
 
       debugPrint("Customer API URL: $url");
       debugPrint("Authorization header: Bearer $authToken");
@@ -1337,7 +1407,7 @@ class CustomerProvider with ChangeNotifier {
       );
 
       if (response.statusCode == 200) {
-        debugPrint("Customer API is working $userId response");
+        debugPrint("Customer API success");
         debugPrint("=== FULL RESPONSE BODY ===");
         debugPrint(response.body);
         debugPrint("=== END RESPONSE BODY ===");
@@ -1396,6 +1466,7 @@ class CustomerProvider with ChangeNotifier {
         }
       } else if (response.statusCode == 401) {
         debugPrint("Customer API unauthorized 401: ${response.body}");
+        await SessionManager.handleSessionExpiry(response.statusCode);
         customersModel = CustomersModel(success: false, message: 'Unauthorized', data: []);
         return false;
       } else {
@@ -1448,10 +1519,10 @@ class CustomerProvider with ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      String? userId = prefs.getString('user_id');
       final authToken = prefs.getString('auth_token') ?? '';
 
-      final url = '${AppConstants.baseUrl}/get_user_devices_api?user_id=$userId&page=$pageIndex&filter=$_currentFilter&search=$_currentSearch';
+      // Build the new API URL with query parameters
+      final url = '${AppConstants.baseUrl}/mobile/customers?search=$_currentSearch&filter=$_currentFilter&mobile_type=$_currentMobileType&page=$pageIndex&per_page=$_perPage';
 
       debugPrint("Fetching more customers - page $pageIndex");
       debugPrint("URL: $url");
@@ -1505,6 +1576,7 @@ class CustomerProvider with ChangeNotifier {
         }
       } else if (response.statusCode == 401) {
         debugPrint("Load more unauthorized 401");
+        await SessionManager.handleSessionExpiry(response.statusCode);
         customersModel = CustomersModel(success: false, message: 'Unauthorized', data: paginatedCustomers);
         return false;
       } else {
@@ -1573,6 +1645,7 @@ class CustomerProvider with ChangeNotifier {
           singleUserDeviceStatus = 'unlock';
         }
       } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
         singleUserDevicesError =
             'Unauthorized (401). Please login again or ensure token is valid.';
       } else {
@@ -1628,6 +1701,11 @@ class CustomerProvider with ChangeNotifier {
           'status': status,
         },
       );
+
+      if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return false;
+      }
 
       final ok = response.statusCode == 200 || response.statusCode == 201;
 
@@ -1696,6 +1774,10 @@ class CustomerProvider with ChangeNotifier {
           locationError = data['message'] ?? 'Failed to get location';
           return false;
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        locationError = 'Session expired. Please login again.';
+        return false;
       } else {
         locationError = 'Failed to fetch location (${response.statusCode})';
         return false;
@@ -1768,6 +1850,10 @@ class CustomerProvider with ChangeNotifier {
           simDetailsError = data['message'] ?? 'Failed to get SIM details';
           return false;
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        simDetailsError = 'Session expired. Please login again.';
+        return false;
       } else {
         simDetailsError = 'Failed to fetch SIM details (${response.statusCode})';
         return false;
@@ -1834,6 +1920,7 @@ class CustomerProvider with ChangeNotifier {
         customerEmiModel = CustomerEmiModel.fromJson(responseData);
         return customerEmiModel?.success ?? false;
       } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
         emiError = 'Session expired. Please login again.';
         return false;
       } else {
@@ -1912,10 +1999,8 @@ class CustomerProvider with ChangeNotifier {
           };
         }
       } else if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'error': 'Session expired. Please login again.',
-        };
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return SessionManager.sessionExpiredResponse();
       } else {
         try {
           final errorData = json.decode(response.body);
@@ -2000,10 +2085,8 @@ class CustomerProvider with ChangeNotifier {
           };
         }
       } else if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'error': 'Session expired. Please login again.',
-        };
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return SessionManager.sessionExpiredResponse();
       } else {
         try {
           final errorData = json.decode(response.body);
@@ -2184,10 +2267,8 @@ class CustomerProvider with ChangeNotifier {
           };
         }
       } else if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'error': 'Session expired. Please login again.',
-        };
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return SessionManager.sessionExpiredResponse();
       } else {
         try {
           final errorData = json.decode(response.body);
@@ -2262,10 +2343,8 @@ class CustomerProvider with ChangeNotifier {
           };
         }
       } else if (response.statusCode == 401) {
-        return {
-          'success': false,
-          'error': 'Session expired. Please login again.',
-        };
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return SessionManager.sessionExpiredResponse();
       } else {
         try {
           final errorData = json.decode(response.body);
@@ -2389,10 +2468,11 @@ class CustomerProvider with ChangeNotifier {
       notifyListeners();
 
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
+      final token = prefs.getString('auth_token') ?? '';
 
-      final url = Uri.parse('${AppConstants.baseUrl}/countries');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/countries');
       debugPrint('Fetching countries from: $url');
+      debugPrint('Auth token present: ${token.isNotEmpty ? "Yes (${token.length} chars)" : "No"}');
 
       final response = await http.get(
         url,
@@ -2418,6 +2498,9 @@ class CustomerProvider with ChangeNotifier {
 
         countries = countryList.map((e) => CountryModel.fromJson(e)).toList();
         debugPrint('Loaded ${countries.length} countries');
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        countries = [];
       } else {
         debugPrint('Failed to fetch countries: ${response.statusCode}');
         countries = [];
@@ -2439,10 +2522,11 @@ class CustomerProvider with ChangeNotifier {
       notifyListeners();
 
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
+      final token = prefs.getString('auth_token') ?? '';
 
-      final url = Uri.parse('${AppConstants.baseUrl}/states/$countryId');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/countries/$countryId/states');
       debugPrint('Fetching states from: $url');
+      debugPrint('Auth token present: ${token.isNotEmpty ? "Yes (${token.length} chars)" : "No"}');
 
       final response = await http.get(
         url,
@@ -2468,6 +2552,9 @@ class CustomerProvider with ChangeNotifier {
 
         states = stateList.map((e) => StateModel.fromJson(e)).toList();
         debugPrint('Loaded ${states.length} states for country $countryId');
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        states = [];
       } else {
         debugPrint('Failed to fetch states: ${response.statusCode}');
         states = [];
@@ -2489,10 +2576,11 @@ class CustomerProvider with ChangeNotifier {
       notifyListeners();
 
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token') ?? '';
+      final token = prefs.getString('auth_token') ?? '';
 
-      final url = Uri.parse('${AppConstants.baseUrl}/cities/$stateId');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/states/$stateId/cities');
       debugPrint('Fetching cities from: $url');
+      debugPrint('Auth token present: ${token.isNotEmpty ? "Yes (${token.length} chars)" : "No"}');
 
       final response = await http.get(
         url,
@@ -2518,6 +2606,9 @@ class CustomerProvider with ChangeNotifier {
 
         cities = cityList.map((e) => CityModel.fromJson(e)).toList();
         debugPrint('Loaded ${cities.length} cities for state $stateId');
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        cities = [];
       } else {
         debugPrint('Failed to fetch cities: ${response.statusCode}');
         cities = [];

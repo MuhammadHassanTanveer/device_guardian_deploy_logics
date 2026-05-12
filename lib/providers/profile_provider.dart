@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/retailer_profile_model.dart';
 import '../models/login_model.dart';
 import '../util/app_constants.dart';
+import '../util/session_manager.dart';
 
 class ProfileProvider with ChangeNotifier {
   bool _isLoading = false;
@@ -79,6 +80,22 @@ class ProfileProvider with ChangeNotifier {
           debugPrint("City: ${_profileData?.city.name} (ID: ${_profileData?.city.id})");
           debugPrint("=====================================");
           
+          // Save location data to SharedPreferences for future use
+          try {
+            if (_profileData?.country != null) {
+              await prefs.setString('user_country', jsonEncode(_profileData!.country.toJson()));
+            }
+            if (_profileData?.state != null) {
+              await prefs.setString('user_state', jsonEncode(_profileData!.state.toJson()));
+            }
+            if (_profileData?.city != null) {
+              await prefs.setString('user_city', jsonEncode(_profileData!.city.toJson()));
+            }
+            debugPrint("=== LOCATION DATA SAVED TO SHARED PREFERENCES ===");
+          } catch (e) {
+            debugPrint("Error saving location to SharedPreferences: $e");
+          }
+
           _isLoading = false;
           _errorMessage = null;
           notifyListeners();
@@ -89,6 +106,11 @@ class ProfileProvider with ChangeNotifier {
               : 'Failed to load profile';
           notifyListeners();
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        _isLoading = false;
+        _errorMessage = 'Session expired. Please login again.';
+        notifyListeners();
       } else {
         _isLoading = false;
         _errorMessage = 'Failed to load profile. Please try again.';
@@ -213,6 +235,12 @@ class ProfileProvider with ChangeNotifier {
           notifyListeners();
           return false;
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        _isLoading = false;
+        _errorMessage = 'Session expired. Please login again.';
+        notifyListeners();
+        return false;
       } else {
         _isLoading = false;
         _errorMessage = 'Failed to update profile. Please try again.';
@@ -240,6 +268,128 @@ class ProfileProvider with ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// Load profile data from SharedPreferences (useful for offline access)
+  Future<void> loadProfileDataFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      
+      // Parse location data from SharedPreferences
+      LocationInfo city = LocationInfo(id: 0, name: 'N/A');
+      LocationInfo state = LocationInfo(id: 0, name: 'N/A');
+      LocationInfo country = LocationInfo(id: 0, name: 'N/A');
+      
+      try {
+        final cityJson = prefs.getString('user_city');
+        if (cityJson != null && cityJson.isNotEmpty) {
+          final cityData = jsonDecode(cityJson);
+          city = LocationInfo(
+            id: cityData['id'] ?? 0,
+            name: cityData['name'] ?? 'N/A',
+          );
+        }
+      } catch (e) {
+        debugPrint('Error parsing city from SharedPreferences: $e');
+      }
+      
+      try {
+        final stateJson = prefs.getString('user_state');
+        if (stateJson != null && stateJson.isNotEmpty) {
+          final stateData = jsonDecode(stateJson);
+          state = LocationInfo(
+            id: stateData['id'] ?? 0,
+            name: stateData['name'] ?? 'N/A',
+          );
+        }
+      } catch (e) {
+        debugPrint('Error parsing state from SharedPreferences: $e');
+      }
+      
+      try {
+        final countryJson = prefs.getString('user_country');
+        if (countryJson != null && countryJson.isNotEmpty) {
+          final countryData = jsonDecode(countryJson);
+          country = LocationInfo(
+            id: countryData['id'] ?? 0,
+            name: countryData['name'] ?? 'N/A',
+          );
+        }
+      } catch (e) {
+        debugPrint('Error parsing country from SharedPreferences: $e');
+      }
+      
+      // If profile data exists but has no location, update it with location from SharedPreferences
+      if (_profileData != null) {
+        // Check if existing profile data has valid location IDs
+        final hasValidLocation = _profileData!.country.id != 0 || 
+                                  _profileData!.state.id != 0 || 
+                                  _profileData!.city.id != 0;
+        
+        // If profile exists but has no location, update with SharedPreferences location
+        if (!hasValidLocation && (country.id != 0 || state.id != 0 || city.id != 0)) {
+          _profileData = RetailerProfileData(
+            id: _profileData!.id,
+            uuid: _profileData!.uuid,
+            name: _profileData!.name,
+            nameUrdu: _profileData!.nameUrdu,
+            companyName: _profileData!.companyName,
+            companyNameUrdu: _profileData!.companyNameUrdu,
+            gstNo: _profileData!.gstNo,
+            avatar: _profileData!.avatar,
+            authkey: _profileData!.authkey,
+            email: _profileData!.email,
+            phone: _profileData!.phone,
+            address: _profileData!.address,
+            city: city,
+            state: state,
+            country: country,
+            sinceMemberDate: _profileData!.sinceMemberDate,
+          );
+          
+          debugPrint("=== PROFILE LOCATION UPDATED FROM SHARED PREFERENCES ===");
+          debugPrint("Country: ${country.name} (ID: ${country.id})");
+          debugPrint("State: ${state.name} (ID: ${state.id})");
+          debugPrint("City: ${city.name} (ID: ${city.id})");
+          debugPrint("=========================================================");
+          
+          notifyListeners();
+        }
+      } else {
+        // Only set profile data if we don't already have it from API
+        final userId = prefs.getString('user_id');
+        if (userId != null) {
+          _profileData = RetailerProfileData(
+            id: int.tryParse(userId) ?? 0,
+            uuid: prefs.getString('user_uuid') ?? '',
+            name: prefs.getString('user_name') ?? 'N/A',
+            nameUrdu: prefs.getString('user_name_urdu') ?? '',
+            companyName: prefs.getString('user_name') ?? 'N/A', // Will be updated when API is called
+            companyNameUrdu: '',
+            gstNo: '',
+            avatar: prefs.getString('user_avatar') ?? '',
+            authkey: '',
+            email: prefs.getString('user_email') ?? 'N/A',
+            phone: prefs.getString('user_phone') ?? 'N/A',
+            address: prefs.getString('user_address') ?? 'N/A',
+            city: city,
+            state: state,
+            country: country,
+            sinceMemberDate: '',
+          );
+          
+          debugPrint("=== PROFILE DATA LOADED FROM SHARED PREFERENCES ===");
+          debugPrint("Country: ${country.name} (ID: ${country.id})");
+          debugPrint("State: ${state.name} (ID: ${state.id})");
+          debugPrint("City: ${city.name} (ID: ${city.id})");
+          debugPrint("====================================================");
+          
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading profile data from SharedPreferences: $e");
+    }
   }
 
   /// Format date helper

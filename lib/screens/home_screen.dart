@@ -1,8 +1,10 @@
 
 import 'dart:io';
 
+import 'package:deviceguardianadmin/providers/customer_provider.dart';
 import 'package:deviceguardianadmin/providers/home_provider.dart';
 import 'package:deviceguardianadmin/providers/login_provider.dart';
+import 'package:deviceguardianadmin/providers/profile_provider.dart';
 import 'package:deviceguardianadmin/util/app_constants.dart';
 import 'package:deviceguardianadmin/util/styles.dart';
 import 'package:deviceguardianadmin/widgets/app_update_dialog.dart';
@@ -124,8 +126,52 @@ class _HomeScreenState extends State<HomeScreen> {
               );
 
               if (shouldLogout == true && context.mounted) {
-                await context.read<LoginProvider>().logout();
+                // Show loading indicator
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (context) => const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+
+                // Call logout API and clear data
+                final success = await context.read<LoginProvider>().logout();
+                
+                // Clear other providers' data
                 if (context.mounted) {
+                  context.read<ProfileProvider>().clearProfileData();
+                  context.read<HomeProvider>().clearData();
+                  context.read<CustomerProvider>().clearAllData();
+                }
+
+                // Close loading indicator
+                if (context.mounted) {
+                  Navigator.pop(context);
+                }
+
+                // Navigate to login screen
+                if (context.mounted) {
+                  if (success) {
+                    // Show success message
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Logged out successfully'),
+                        backgroundColor: Colors.green,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  } else {
+                    // Show warning (still logged out locally even if API failed)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Logged out locally (network error)'),
+                        backgroundColor: Colors.orange,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                  
                   Navigator.of(context).pushAndRemoveUntil(
                     MaterialPageRoute(builder: (context) => const LoginScreen()),
                     (route) => false,

@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../models/app_version_model.dart';
 import '../models/key_rate_model.dart';
 import '../util/app_constants.dart';
+import '../util/session_manager.dart';
 
 class HomeProvider with ChangeNotifier {
   bool _isLoading = false;
@@ -88,6 +89,11 @@ class HomeProvider with ChangeNotifier {
           _errorMessage = data['message'] ?? 'Failed to load counts';
           notifyListeners();
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        _isLoading = false;
+        _errorMessage = 'Session expired. Please login again.';
+        notifyListeners();
       } else {
         _isLoading = false;
         _errorMessage = 'Failed to load counts. Please try again.';
@@ -148,6 +154,8 @@ class HomeProvider with ChangeNotifier {
           await prefs.setString('user_name', _userName!);
           notifyListeners();
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
       }
     } catch (e) {
       debugPrint("Fetch user name error: $e");
@@ -206,6 +214,11 @@ class HomeProvider with ChangeNotifier {
             return _isVersionOutdated;
           }
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        _isVersionOutdated = false;
+        notifyListeners();
+        return false;
       }
       
       _isVersionOutdated = false;
@@ -248,6 +261,8 @@ class HomeProvider with ChangeNotifier {
           final rateData = data['Data'] ?? data['data'] ?? data;
           return KeyRateModel.fromJson(rateData);
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
       }
       return null;
     } catch (e) {
@@ -315,6 +330,9 @@ class HomeProvider with ChangeNotifier {
         } else {
           return {'success': false, 'message': data['message'] ?? 'Failed to submit purchase request.'};
         }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return SessionManager.sessionExpiredResponse();
       } else {
         return {'success': false, 'message': 'Failed to submit purchase request. Please try again.'};
       }
