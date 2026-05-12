@@ -23,11 +23,15 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   
+  final _companyNameController = TextEditingController();
+  final _companyNameUrduController = TextEditingController();
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _addressController = TextEditingController();
 
+  final _companyNameFocusNode = FocusNode();
+  final _companyNameUrduFocusNode = FocusNode();
   final _nameFocusNode = FocusNode();
   final _emailFocusNode = FocusNode();
   final _phoneFocusNode = FocusNode();
@@ -61,10 +65,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   void _populateFields() {
     final profileProvider = context.read<ProfileProvider>();
     
+    _companyNameController.text = profileProvider.companyName != 'N/A' ? profileProvider.companyName : '';
+    _companyNameUrduController.text = profileProvider.companyNameUrdu.isNotEmpty ? profileProvider.companyNameUrdu : '';
     _nameController.text = profileProvider.name != 'N/A' ? profileProvider.name : '';
     _emailController.text = profileProvider.email != 'N/A' ? profileProvider.email : '';
     _addressController.text = profileProvider.address != 'N/A' ? profileProvider.address : '';
-    
+
     // Parse phone number to extract country code
     if (profileProvider.phone != 'N/A' && profileProvider.phone.isNotEmpty) {
       _parsePhoneNumber(profileProvider.phone);
@@ -154,16 +160,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
+    _companyNameController.dispose();
+    _companyNameUrduController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
-    
+
+    _companyNameFocusNode.dispose();
+    _companyNameUrduFocusNode.dispose();
     _nameFocusNode.dispose();
     _emailFocusNode.dispose();
     _phoneFocusNode.dispose();
     _addressFocusNode.dispose();
-    
+
     // Clear location selections after the frame is complete to avoid
     // "setState() called when widget tree was locked" error
     final provider = _customerProvider;
@@ -215,6 +225,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         cityName: selectedCity?.name ?? profileProvider.cityName,
         stateName: selectedState?.name ?? profileProvider.stateName,
         countryName: selectedCountry?.name ?? profileProvider.countryName,
+        companyName: _companyNameController.text.trim().isNotEmpty
+            ? _companyNameController.text.trim()
+            : _nameController.text.trim(),
+        companyNameUrdu: _companyNameUrduController.text.trim(),
+        gstNo: profileProvider.gstNo,
       );
 
       if (mounted) {
@@ -282,7 +297,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 const SizedBox(height: 16),
                                 _buildFormCard([
                                   CustomTextFieldWidget(
-                                    labelText: 'Name (نام)',
+                                    labelText: 'Company Name (کمپنی کا نام)',
+                                    hintText: 'Enter company name',
+                                    controller: _companyNameController,
+                                    focusNode: _companyNameFocusNode,
+                                    nextFocus: _companyNameUrduFocusNode,
+                                    prefixIcon: Icons.business_rounded,
+                                    required: true,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Please enter company name';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  const SizedBox(height: 16),
+                                  CustomTextFieldWidget(
+                                    labelText: 'Company Name Urdu (کمپنی کا نام اردو)',
+                                    hintText: 'Enter company name in Urdu (اردو میں کمپنی کا نام درج کریں)',
+                                    controller: _companyNameUrduController,
+                                    focusNode: _companyNameUrduFocusNode,
+                                    nextFocus: _nameFocusNode,
+                                    prefixIcon: Icons.translate_rounded,
+                                    required: false,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  CustomTextFieldWidget(
+                                    labelText: 'User Name (نام)',
                                     hintText: 'Enter your name',
                                     controller: _nameController,
                                     focusNode: _nameFocusNode,
@@ -569,7 +610,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               radius: 35,
               backgroundColor: colorScheme.primary.withValues(alpha: 0.1),
               child: Text(
-                _getInitials(profileProvider.name),
+                _getInitials(profileProvider.companyName),
                 style: robotoBold(context).copyWith(
                   fontSize: 24,
                   color: colorScheme.primary,
@@ -752,14 +793,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   String _getInitials(String name) {
+    // Return first letter of company name
     if (name.isEmpty || name == 'N/A') return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return name[0].toUpperCase();
+    return name.trim()[0].toUpperCase();
   }
 }
+
 
 
 

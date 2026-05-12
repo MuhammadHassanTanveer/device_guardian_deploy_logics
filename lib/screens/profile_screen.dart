@@ -246,9 +246,9 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
-                        // Name
+                        // Company Name
                         Text(
-                          profileProvider.name,
+                          profileProvider.companyName,
                           style: robotoBold(context).copyWith(
                             fontSize: Dimensions.fontSizeOverLarge(context),
                             color: colorScheme.tertiary,
@@ -256,8 +256,18 @@ class _ProfileScreenState extends State<ProfileScreen>
                           ),
                         ),
                         const SizedBox(height: 4),
-                        // Shop Name or Email
-                        if (profileProvider.shopName.isNotEmpty)
+                        // Company Name Urdu
+                        if (profileProvider.companyNameUrdu.isNotEmpty)
+                          Text(
+                            profileProvider.companyNameUrdu,
+                            style: robotoMedium(context).copyWith(
+                              fontSize: Dimensions.fontSizeLarge(context),
+                              color: colorScheme.tertiary.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                        // User Name Badge
+                        if (profileProvider.name.isNotEmpty && profileProvider.name != 'N/A')
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
@@ -270,10 +280,10 @@ class _ProfileScreenState extends State<ProfileScreen>
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.store_rounded, color: colorScheme.primary, size: 16),
+                                Icon(Icons.person_rounded, color: colorScheme.primary, size: 16),
                                 const SizedBox(width: 6),
                                 Text(
-                                  profileProvider.shopName,
+                                  profileProvider.name,
                                   style: robotoRegular(context).copyWith(
                                     fontSize: Dimensions.fontSizeSmall(context),
                                     color: colorScheme.primary,
@@ -313,6 +323,22 @@ class _ProfileScreenState extends State<ProfileScreen>
                       // Quick Stats Row
                       _buildQuickStatsRow(profileProvider),
                       const SizedBox(height: 24),
+
+                      // Company Information
+                      _buildModernInfoCard(
+                        title: 'Company Information',
+                        urduTitle: 'کمپنی کی معلومات',
+                        icon: Icons.business_rounded,
+                        iconColor: Colors.purple,
+                        items: [
+                          _InfoItem(Icons.store_rounded, 'Company Name', profileProvider.companyName, 'کمپنی کا نام'),
+                          if (profileProvider.companyNameUrdu.isNotEmpty)
+                            _InfoItem(Icons.translate_rounded, 'Company Name (Urdu)', profileProvider.companyNameUrdu, 'کمپنی کا نام اردو میں'),
+                          if (profileProvider.gstNo.isNotEmpty)
+                            _InfoItem(Icons.receipt_long_rounded, 'GST Number', profileProvider.gstNo, 'جی ایس ٹی نمبر'),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
 
                       // Contact Information
                       _buildModernInfoCard(
@@ -634,12 +660,9 @@ class _ProfileScreenState extends State<ProfileScreen>
   }
 
   String _getInitials(String name) {
+    // Return first letter of company name
     if (name.isEmpty || name == 'N/A') return '?';
-    final parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
-    }
-    return name[0].toUpperCase();
+    return name.trim()[0].toUpperCase();
   }
 }
 

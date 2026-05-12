@@ -44,6 +44,9 @@ class RetailerProfileData {
   final String uuid;
   final String name;
   final String nameUrdu;
+  final String companyName;
+  final String companyNameUrdu;
+  final String gstNo;
   final String avatar;
   final String authkey;
   final String email;
@@ -59,6 +62,9 @@ class RetailerProfileData {
     required this.uuid,
     required this.name,
     required this.nameUrdu,
+    required this.companyName,
+    required this.companyNameUrdu,
+    required this.gstNo,
     required this.avatar,
     required this.authkey,
     required this.email,
@@ -74,12 +80,15 @@ class RetailerProfileData {
     return RetailerProfileData(
       id: _parseInt(json['id']),
       uuid: json['uuid']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
+      name: json['name']?.toString() ?? json['user_name']?.toString() ?? '',
       nameUrdu: json['name_urdu']?.toString() ?? '',
+      companyName: json['company_name']?.toString() ?? '',
+      companyNameUrdu: json['company_name_urdu']?.toString() ?? '',
+      gstNo: json['gst_no']?.toString() ?? '',
       avatar: json['avatar']?.toString() ?? '',
       authkey: json['authkey']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
-      phone: json['phone']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? json['contact_number']?.toString() ?? '',
       address: json['address']?.toString() ?? '',
       city: LocationInfo.fromJson(json['city']),
       state: LocationInfo.fromJson(json['state']),
@@ -94,6 +103,9 @@ class RetailerProfileData {
       'uuid': uuid,
       'name': name,
       'name_urdu': nameUrdu,
+      'company_name': companyName,
+      'company_name_urdu': companyNameUrdu,
+      'gst_no': gstNo,
       'avatar': avatar,
       'authkey': authkey,
       'email': email,

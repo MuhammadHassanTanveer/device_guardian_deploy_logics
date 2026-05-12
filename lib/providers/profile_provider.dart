@@ -30,8 +30,11 @@ class ProfileProvider with ChangeNotifier {
   String get avatar => _profileData?.avatar ?? '';
   String get uuid => _profileData?.uuid ?? '';
   String get nameUrdu => _profileData?.nameUrdu ?? '';
+  String get companyName => _profileData?.companyName ?? 'N/A';
+  String get companyNameUrdu => _profileData?.companyNameUrdu ?? '';
+  String get gstNo => _profileData?.gstNo ?? '';
   String get sinceMemberDate => _profileData?.sinceMemberDate ?? '';
-  String get shopName => _profileData?.nameUrdu ?? '';
+  String get shopName => (_profileData?.companyName != null && _profileData!.companyName.isNotEmpty) ? _profileData!.companyName : _profileData?.nameUrdu ?? '';
   String get createdAt => _profileData?.sinceMemberDate ?? '';
 
   /// Fetch user profile from API
@@ -43,7 +46,6 @@ class ProfileProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
 
       if (token.isEmpty) {
         _isLoading = false;
@@ -53,7 +55,7 @@ class ProfileProvider with ChangeNotifier {
       }
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_retailer_profile?user_id=$userId'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/profile'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -112,6 +114,9 @@ class ProfileProvider with ChangeNotifier {
     String? cityName,
     String? stateName,
     String? countryName,
+    String? companyName,
+    String? companyNameUrdu,
+    String? gstNo,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -120,7 +125,6 @@ class ProfileProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
 
       if (token.isEmpty) {
         _isLoading = false;
@@ -130,20 +134,21 @@ class ProfileProvider with ChangeNotifier {
       }
 
       final body = {
-        'user_id': userId,
-        'name': name,
-        'email': email,
-        'phone': phone,
+        'company_name': companyName ?? name,
+        'company_name_urdu': companyNameUrdu ?? '',
+        'user_name': name,
+        'contact_number': phone,
         'address': address,
-        'city': cityId,
-        'state': stateId,
-        'country': countryId,
+        'gst_no': gstNo ?? '',
+        'country_id': countryId,
+        'state_id': stateId,
+        'city_id': cityId,
       };
 
       debugPrint("Update Profile Request Body: ${jsonEncode(body)}");
 
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/update_retailer_profile'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/profile'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -165,6 +170,9 @@ class ProfileProvider with ChangeNotifier {
               uuid: _profileData!.uuid,
               name: name,
               nameUrdu: _profileData!.nameUrdu,
+              companyName: companyName ?? name,
+              companyNameUrdu: companyNameUrdu ?? _profileData!.companyNameUrdu,
+              gstNo: gstNo ?? _profileData!.gstNo,
               avatar: _profileData!.avatar,
               authkey: _profileData!.authkey,
               email: email,

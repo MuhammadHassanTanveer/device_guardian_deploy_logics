@@ -51,11 +51,21 @@ class _LoginScreenState extends State<LoginScreen> {
         if (!mounted) return;
         
         if (pinCode == null) {
-          // API call failed, still navigate to home
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-            (route) => false,
-          );
+          // API call failed, check stored PIN
+          final storedPin = await provider.getStoredPinCode();
+          if (storedPin != null && storedPin.isNotEmpty) {
+            // Has stored PIN, go to home
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+              (route) => false,
+            );
+          } else {
+            // No stored PIN and API failed, force PIN setup
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
+              (route) => false,
+            );
+          }
         } else if (pinCode.isEmpty) {
           // Pin code is not set, show update pin screen
           Navigator.of(context).pushAndRemoveUntil(

@@ -269,7 +269,7 @@ class LoginProvider with ChangeNotifier {
       debugPrint("getPinCode: Fetching pin code...");
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/api/mobile/get-pin-cod'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/get-pin-code'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -282,7 +282,8 @@ class LoginProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        if (data['success'] == true) {
+        // Handle both 'success' and 'status' fields
+        if (data['success'] == true || data['status'] == true) {
           final pinCode = data['data']?['pin_code'];
           
           // If pin_code exists, store it in SharedPreferences
@@ -296,7 +297,13 @@ class LoginProvider with ChangeNotifier {
             return ''; // Return empty string to indicate pin is not set
           }
         } else {
-          debugPrint("getPinCode: API returned success=false");
+          // Check if message indicates pin code not set
+          final message = data['message']?.toString().toLowerCase() ?? '';
+          if (message.contains('pin code not set') || message.contains('pin not set')) {
+            debugPrint("getPinCode: API returned pin code not set");
+            return ''; // Return empty string to indicate pin is not set
+          }
+          debugPrint("getPinCode: API returned success/status=false");
           return null;
         }
       } else {
@@ -321,6 +328,7 @@ class LoginProvider with ChangeNotifier {
 
       if (token.isEmpty) {
         debugPrint("updatePin: No auth token found");
+        errorMessage = 'Session expired. Please login again.';
         isLoading = false;
         notifyListeners();
         return false;
@@ -328,15 +336,17 @@ class LoginProvider with ChangeNotifier {
 
       if (userId.isEmpty) {
         debugPrint("updatePin: No user_id found");
+        errorMessage = 'User ID not found. Please login again.';
         isLoading = false;
         notifyListeners();
         return false;
       }
 
       debugPrint("updatePin: Updating pin code for user_id: $userId");
+      debugPrint("updatePin: Token length: ${token.length}");
 
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/update_pin_code'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/update-pin-code'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -348,9 +358,10 @@ class LoginProvider with ChangeNotifier {
         }),
       );
 
+      debugPrint("updatePin API Response Status: ${response.statusCode}");
       debugPrint("updatePin API Response: ${response.body}");
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         
         if (data['success'] == true || data['status'] == true) {
@@ -368,8 +379,21 @@ class LoginProvider with ChangeNotifier {
           notifyListeners();
           return false;
         }
+      } else if (response.statusCode == 401) {
+        // Unauthorized - token expired or invalid
+        errorMessage = 'Session expired. Please login again.';
+        debugPrint("updatePin: Unauthorized - Token may be expired");
+        isLoading = false;
+        notifyListeners();
+        return false;
       } else {
-        errorMessage = 'Failed to update PIN. Please try again.';
+        // Try to parse error message from response
+        try {
+          final data = jsonDecode(response.body);
+          errorMessage = data['message'] ?? 'Failed to update PIN. Please try again.';
+        } catch (e) {
+          errorMessage = 'Failed to update PIN. Please try again.';
+        }
         isLoading = false;
         notifyListeners();
         return false;

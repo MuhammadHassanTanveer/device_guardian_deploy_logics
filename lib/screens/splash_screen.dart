@@ -58,9 +58,9 @@ class _SplashScreenState extends State<SplashScreen> {
                 (route) => false,
               );
             } else {
-              // No stored PIN, go to home anyway (might need PIN setup)
+              // No stored PIN and API failed, force PIN setup
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
+                MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
                 (route) => false,
               );
             }

@@ -127,7 +127,7 @@ class HomeProvider with ChangeNotifier {
       if (token.isEmpty) return;
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_retailer_profile?user_id=$userId'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/profile'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

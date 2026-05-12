@@ -59,7 +59,16 @@ class _UpdatePinScreenState extends State<UpdatePinScreen> {
               Navigator.of(context).pop();
             }
           } else {
-            showCustomSnackBar(context, provider.errorMessage ?? "Failed to update PIN. Please try again.", isError: true);
+            // Check if error is authentication related
+            final errorMsg = provider.errorMessage ?? "Failed to update PIN. Please try again.";
+            showCustomSnackBar(context, errorMsg, isError: true);
+
+            // If session expired, offer to logout
+            if (errorMsg.toLowerCase().contains('session expired') ||
+                errorMsg.toLowerCase().contains('login again') ||
+                errorMsg.toLowerCase().contains('unauthenticated')) {
+              _showLogoutDialog();
+            }
           }
         }
       } catch (e) {
@@ -74,6 +83,46 @@ class _UpdatePinScreenState extends State<UpdatePinScreen> {
         }
       }
     }
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(
+            'Session Expired',
+            style: robotoBold(context),
+          ),
+          content: Text(
+            'Your session has expired. Please login again to continue.',
+            style: robotoRegular(context),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                // Logout and go to login screen
+                final provider = context.read<LoginProvider>();
+                await provider.logout();
+                if (mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/',
+                    (route) => false,
+                  );
+                }
+              },
+              child: Text(
+                'Logout',
+                style: robotoBold(context).copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
