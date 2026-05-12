@@ -27,27 +27,33 @@ class RegistrationProvider with ChangeNotifier {
   StateModel? selectedState;
   CityModel? selectedCity;
 
-  // Type dropdown options
-  List<String> typeOptions = ['Distributor', 'FOS', 'Retailer'];
-  String? selectedType;
+
 
   /// Fetch all countries from API
   Future<void> fetchCountries() async {
     try {
       isLoadingCountries = true;
+      errorMessage = null;
       notifyListeners();
 
-      final url = Uri.parse('${AppConstants.baseUrl}/countries');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/countries');
       debugPrint('Fetching countries from: $url');
 
       final response = await http.get(
         url,
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () {
+          throw Exception('Connection timeout - Please check your internet connection');
         },
       );
 
       debugPrint('Countries API Response Status: ${response.statusCode}');
+      debugPrint('Countries API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -57,18 +63,52 @@ class RegistrationProvider with ChangeNotifier {
         if (data is List) {
           countryList = data;
         } else if (data is Map) {
-          countryList = data['data'] ?? data['Data'] ?? data['countries'] ?? [];
+          // Try multiple possible keys
+          countryList = data['data'] ??
+                       data['Data'] ??
+                       data['countries'] ??
+                       data['result'] ??
+                       data['results'] ??
+                       [];
         }
 
-        countries = countryList.map((e) => CountryModel.fromJson(e)).toList();
-        debugPrint('Loaded ${countries.length} countries');
+        if (countryList.isEmpty) {
+          debugPrint('Warning: Country list is empty. Response structure might have changed.');
+          debugPrint('Full response: $data');
+          errorMessage = 'No countries found in response';
+        }
+
+        countries = countryList.map((e) {
+          try {
+            return CountryModel.fromJson(e as Map<String, dynamic>);
+          } catch (error) {
+            debugPrint('Error parsing country: $e, Error: $error');
+            return null;
+          }
+        }).whereType<CountryModel>().toList();
+
+        debugPrint('Successfully loaded ${countries.length} countries');
       } else {
-        debugPrint('Failed to fetch countries: ${response.statusCode}');
+        debugPrint('Failed to fetch countries. Status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
         countries = [];
+        errorMessage = 'Failed to load countries. Status: ${response.statusCode}';
       }
-    } catch (e) {
-      debugPrint('Error fetching countries: $e');
+    } on http.ClientException catch (e, stackTrace) {
+      debugPrint('Network error fetching countries: $e');
+      debugPrint('Stack trace: $stackTrace');
       countries = [];
+      errorMessage = 'Network error: Cannot reach server. Please check your internet connection.';
+    } on FormatException catch (e, stackTrace) {
+      debugPrint('JSON parsing error: $e');
+      debugPrint('Stack trace: $stackTrace');
+      countries = [];
+      errorMessage = 'Error parsing server response';
+    } catch (e, stackTrace) {
+      debugPrint('Error fetching countries: $e');
+      debugPrint('Stack trace: $stackTrace');
+      countries = [];
+      errorMessage = 'Error loading countries: ${e.toString()}';
     } finally {
       isLoadingCountries = false;
       notifyListeners();
@@ -82,17 +122,19 @@ class RegistrationProvider with ChangeNotifier {
       states = [];
       notifyListeners();
 
-      final url = Uri.parse('${AppConstants.baseUrl}/states/$countryId');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/countries/$countryId/states');
       debugPrint('Fetching states from: $url');
 
       final response = await http.get(
         url,
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       );
 
       debugPrint('States API Response Status: ${response.statusCode}');
+      debugPrint('States API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -102,17 +144,38 @@ class RegistrationProvider with ChangeNotifier {
         if (data is List) {
           stateList = data;
         } else if (data is Map) {
-          stateList = data['data'] ?? data['Data'] ?? data['states'] ?? [];
+          // Try multiple possible keys
+          stateList = data['data'] ??
+                     data['Data'] ??
+                     data['states'] ??
+                     data['result'] ??
+                     data['results'] ??
+                     [];
         }
 
-        states = stateList.map((e) => StateModel.fromJson(e)).toList();
-        debugPrint('Loaded ${states.length} states for country $countryId');
+        if (stateList.isEmpty) {
+          debugPrint('Warning: State list is empty for country $countryId. Response structure might have changed.');
+          debugPrint('Full response: $data');
+        }
+
+        states = stateList.map((e) {
+          try {
+            return StateModel.fromJson(e as Map<String, dynamic>);
+          } catch (error) {
+            debugPrint('Error parsing state: $e, Error: $error');
+            return null;
+          }
+        }).whereType<StateModel>().toList();
+
+        debugPrint('Successfully loaded ${states.length} states for country $countryId');
       } else {
-        debugPrint('Failed to fetch states: ${response.statusCode}');
+        debugPrint('Failed to fetch states. Status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
         states = [];
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Error fetching states: $e');
+      debugPrint('Stack trace: $stackTrace');
       states = [];
     } finally {
       isLoadingStates = false;
@@ -127,17 +190,19 @@ class RegistrationProvider with ChangeNotifier {
       cities = [];
       notifyListeners();
 
-      final url = Uri.parse('${AppConstants.baseUrl}/cities/$stateId');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/states/$stateId/cities');
       debugPrint('Fetching cities from: $url');
 
       final response = await http.get(
         url,
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       );
 
       debugPrint('Cities API Response Status: ${response.statusCode}');
+      debugPrint('Cities API Response Body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -147,17 +212,38 @@ class RegistrationProvider with ChangeNotifier {
         if (data is List) {
           cityList = data;
         } else if (data is Map) {
-          cityList = data['data'] ?? data['Data'] ?? data['cities'] ?? [];
+          // Try multiple possible keys
+          cityList = data['data'] ??
+                    data['Data'] ??
+                    data['cities'] ??
+                    data['result'] ??
+                    data['results'] ??
+                    [];
         }
 
-        cities = cityList.map((e) => CityModel.fromJson(e)).toList();
-        debugPrint('Loaded ${cities.length} cities for state $stateId');
+        if (cityList.isEmpty) {
+          debugPrint('Warning: City list is empty for state $stateId. Response structure might have changed.');
+          debugPrint('Full response: $data');
+        }
+
+        cities = cityList.map((e) {
+          try {
+            return CityModel.fromJson(e as Map<String, dynamic>);
+          } catch (error) {
+            debugPrint('Error parsing city: $e, Error: $error');
+            return null;
+          }
+        }).whereType<CityModel>().toList();
+
+        debugPrint('Successfully loaded ${cities.length} cities for state $stateId');
       } else {
-        debugPrint('Failed to fetch cities: ${response.statusCode}');
+        debugPrint('Failed to fetch cities. Status: ${response.statusCode}');
+        debugPrint('Response body: ${response.body}');
         cities = [];
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       debugPrint('Error fetching cities: $e');
+      debugPrint('Stack trace: $stackTrace');
       cities = [];
     } finally {
       isLoadingCities = false;
@@ -197,12 +283,6 @@ class RegistrationProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set selected type
-  void setSelectedType(String? type) {
-    selectedType = type;
-    notifyListeners();
-  }
-
   /// Clear all location selections
   void clearLocationSelections() {
     selectedCountry = null;
@@ -218,7 +298,6 @@ class RegistrationProvider with ChangeNotifier {
     selectedCountry = null;
     selectedState = null;
     selectedCity = null;
-    selectedType = null;
     states = [];
     cities = [];
     errorMessage = null;
@@ -227,17 +306,17 @@ class RegistrationProvider with ChangeNotifier {
 
   /// Register new user/admin
   Future<bool> registerUser({
-    required String name,
-    required String nameUrdu,
-    required String phone,
+    required String userName,
+    required String companyName,
+    String? companyNameUrdu,
+    required String contactNumber,
     required String email,
     required String password,
+    required String passwordConfirmation,
     required String address,
-    required String country,
-    required String state,
-    required String city,
-    required String type,
-    String? avatar,
+    required String countryId,
+    required String stateId,
+    required String cityId,
     String? referenceCode,
   }) async {
     try {
@@ -246,23 +325,29 @@ class RegistrationProvider with ChangeNotifier {
       isRegistrationSuccess = false;
       notifyListeners();
 
-      final url = Uri.parse('${AppConstants.baseUrl}/register_user_api');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/register-retailer');
       debugPrint('Registering user at: $url');
 
       final body = {
-        'name': name,
-        'name_urdu': nameUrdu,
-        'phone': phone,
-        'address': address,
-        'country': country,
-        'state': state,
-        'city': city,
-        'type': type,
-        'avatar': avatar ?? '',
+        'user_name': userName,
         'email': email,
         'password': password,
-        'reference_code': referenceCode ?? '',
+        'password_confirmation': passwordConfirmation,
+        'contact_number': contactNumber,
+        'company_name': companyName,
+        'country_id': countryId,
+        'state_id': stateId,
+        'city_id': cityId,
+        'address': address,
       };
+
+      // Add optional fields only if they are provided
+      if (companyNameUrdu != null && companyNameUrdu.isNotEmpty) {
+        body['company_name_urdu'] = companyNameUrdu;
+      }
+      if (referenceCode != null && referenceCode.isNotEmpty) {
+        body['reference_code'] = referenceCode;
+      }
 
       debugPrint('Registration request body: $body');
 

@@ -54,7 +54,6 @@ class HomeProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
-      final userId = prefs.getString('user_id') ?? '';
 
       if (token.isEmpty) {
         _isLoading = false;
@@ -64,7 +63,7 @@ class HomeProvider with ChangeNotifier {
       }
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_counts?user_id=$userId'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/customers/counts'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -77,8 +76,10 @@ class HomeProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
+        // Handle both 'success' and 'status' fields
         if (data['success'] == true || data['status'] == true) {
-          _countsData = data['Data'] ?? data['data'] ?? data;
+          // Try different possible response structures for counts
+          _countsData = data['data'] ?? data['Data'] ?? data['counts'] ?? data;
           _isLoading = false;
           _errorMessage = null;
           notifyListeners();
@@ -168,7 +169,7 @@ class HomeProvider with ChangeNotifier {
       final token = prefs.getString('auth_token') ?? '';
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_app_version'),
+        Uri.parse('${AppConstants.baseUrl}/app-info'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -181,9 +182,11 @@ class HomeProvider with ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
 
-        if (data['success'] == true) {
-          final versionData = data['Data']?['data'] ?? data['data'];
-          
+        // Handle both 'success' and 'status' fields
+        if (data['success'] == true || data['status'] == true) {
+          // Try different possible response structures
+          final versionData = data['data'] ?? data['Data'] ?? data['app_info'] ?? data;
+
           if (versionData != null) {
             _appVersionData = AppVersionModel.fromJson(versionData);
             _downloadUrl = _appVersionData?.appDownloadUrl ?? '';

@@ -5,8 +5,8 @@ class AppConstants {
 
   static const String fontFamily = 'Roboto';
 
-  static const String baseUrl = 'https://locker.deploylogics.com/api';
-  static const String imageUrl = 'https://locker.deploylogics.com/';
+  static const String baseUrl = 'https://api.deviceguardian.net/api';
+  static const String imageUrl = 'https://api.deviceguardian.net/';
 
   static const double maxLimitOfFileSentINConversation = 25;
   static const double maxLimitOfTotalFileSent = 5;

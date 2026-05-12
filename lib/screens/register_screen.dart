@@ -20,6 +20,7 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _userNameController = TextEditingController();
   final _companyNameController = TextEditingController();
   final _nameInUrduController = TextEditingController();
   final _emailController = TextEditingController();
@@ -29,6 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _addressController = TextEditingController();
   final _referenceCodeController = TextEditingController();
 
+  final _userNameFocusNode = FocusNode();
   final _companyNameFocusNode = FocusNode();
   final _nameInUrduFocusNode = FocusNode();
   final _emailFocusNode = FocusNode();
@@ -47,12 +49,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<RegistrationProvider>();
       provider.clearAllData();
-      provider.fetchCountries();
+      provider.fetchCountries().then((_) {
+        // Show error if countries failed to load
+        if (provider.errorMessage != null && mounted) {
+          showCustomSnackBar(
+            context, 
+            provider.errorMessage!, 
+            isError: true,
+          );
+        }
+      });
     });
   }
 
   @override
   void dispose() {
+    _userNameController.dispose();
     _companyNameController.dispose();
     _nameInUrduController.dispose();
     _emailController.dispose();
@@ -61,6 +73,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _phoneController.dispose();
     _addressController.dispose();
     _referenceCodeController.dispose();
+    _userNameFocusNode.dispose();
     _companyNameFocusNode.dispose();
     _nameInUrduFocusNode.dispose();
     _emailFocusNode.dispose();
@@ -92,23 +105,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      if (provider.selectedType == null) {
-        showCustomSnackBar(context, "Please select a type", isError: true);
-        return;
-      }
-
       final success = await provider.registerUser(
-        name: _companyNameController.text.trim(),
-        nameUrdu: _nameInUrduController.text.trim(),
-        phone: '$_selectedCountryCode${_phoneController.text.trim()}',
+        userName: _userNameController.text.trim(),
+        companyName: _companyNameController.text.trim(),
+        companyNameUrdu: _nameInUrduController.text.trim().isEmpty
+            ? null
+            : _nameInUrduController.text.trim(),
+        contactNumber: '$_selectedCountryCode${_phoneController.text.trim()}',
         email: _emailController.text.trim(),
         password: _passwordController.text,
+        passwordConfirmation: _confirmPasswordController.text,
         address: _addressController.text.trim(),
-        country: provider.selectedCountry!.id.toString(),
-        state: provider.selectedState!.id.toString(),
-        city: provider.selectedCity!.id.toString(),
-        type: provider.selectedType!,
-        referenceCode: _referenceCodeController.text.trim(),
+        countryId: provider.selectedCountry!.id.toString(),
+        stateId: provider.selectedState!.id.toString(),
+        cityId: provider.selectedCity!.id.toString(),
+        referenceCode: _referenceCodeController.text.trim().isEmpty
+            ? null
+            : _referenceCodeController.text.trim(),
       );
 
       if (success && mounted) {
@@ -195,6 +208,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: Dimensions.paddingSizeExtraLarge),
+
+                        // Username Field
+                        CustomTextFieldWidget(
+                          labelText: 'Username صارف نام',
+                          hintText: 'Enter your username صارف نام درج کریں',
+                          controller: _userNameController,
+                          focusNode: _userNameFocusNode,
+                          nextFocus: _companyNameFocusNode,
+                          inputType: TextInputType.text,
+                          prefixIcon: Icons.person_outline,
+                          required: true,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter username صارف نام درج کریں';
+                            }
+                            if (value.length < 3) {
+                              return 'Username must be at least 3 characters صارف نام کم از کم 3 حروف کا ہونا چاہیے';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: Dimensions.paddingSizeDefault),
 
                         // Company Name Field
                         CustomTextFieldWidget(
@@ -418,14 +453,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: Dimensions.paddingSizeDefault),
 
-                        // Type Dropdown
-                        Consumer<RegistrationProvider>(
-                          builder: (context, provider, child) {
-                            return _buildTypeDropdown(context, provider);
-                          },
-                        ),
-                        const SizedBox(height: Dimensions.paddingSizeDefault),
-
                         // Reference Code Field
                         CustomTextFieldWidget(
                           labelText: 'Reference Code حوالہ کوڈ',
@@ -554,202 +581,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-
-  Widget _buildTypeDropdown(BuildContext context, RegistrationProvider provider) {
-    final theme = Theme.of(context);
-
-    return FormField<String>(
-      validator: (value) {
-        if (provider.selectedType == null) {
-          return 'Please select type قسم منتخب کریں';
-        }
-        return null;
-      },
-      builder: (FormFieldState<String> state) {
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InkWell(
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                _showTypeBottomSheet(context, provider);
-              },
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  errorMaxLines: 2,
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
-                    borderSide: BorderSide(
-                      width: 0.3,
-                      color: state.hasError
-                          ? theme.colorScheme.error
-                          : theme.disabledColor,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
-                    borderSide: BorderSide(
-                      width: 1,
-                      color: theme.primaryColor,
-                    ),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
-                    borderSide: BorderSide(
-                      width: 0.3,
-                      color: theme.primaryColor,
-                    ),
-                  ),
-                  errorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                  focusedErrorBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
-                    borderSide: BorderSide(
-                      color: theme.colorScheme.error,
-                    ),
-                  ),
-                  isDense: true,
-                  fillColor: theme.cardColor,
-                  filled: true,
-                  errorText: state.errorText,
-                  errorStyle: robotoRegular(context).copyWith(
-                    fontSize: Dimensions.fontSizeSmall(context),
-                  ),
-                  label: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'Type قسم',
-                          style: robotoRegular(context).copyWith(
-                            fontSize: Dimensions.fontSizeLarge(context),
-                            color: theme.hintColor.withValues(alpha: .75),
-                          ),
-                        ),
-                        TextSpan(
-                          text: ' *',
-                          style: robotoRegular(context).copyWith(
-                            color: theme.colorScheme.error,
-                            fontSize: Dimensions.fontSizeLarge(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  prefixIcon: Icon(
-                    Icons.category_outlined,
-                    size: 18,
-                    color: theme.hintColor.withValues(alpha: 0.7),
-                  ),
-                  suffixIcon: Icon(
-                    Icons.arrow_drop_down,
-                    color: theme.hintColor,
-                  ),
-                ),
-                child: Text(
-                  provider.selectedType ?? 'Select type قسم منتخب کریں',
-                  style: robotoRegular(context).copyWith(
-                    fontSize: Dimensions.fontSizeLarge(context),
-                    color: provider.selectedType != null
-                        ? theme.textTheme.bodyLarge?.color
-                        : theme.hintColor.withValues(alpha: 0.7),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showTypeBottomSheet(BuildContext context, RegistrationProvider provider) {
-    final theme = Theme.of(context);
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: theme.cardColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (BuildContext bottomSheetContext) {
-        return Container(
-          padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Select Type قسم منتخب کریں',
-                    style: robotoBold(context).copyWith(
-                      fontSize: Dimensions.fontSizeExtraLarge(context),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(bottomSheetContext),
-                    icon: const Icon(Icons.close),
-                  ),
-                ],
-              ),
-              const Divider(),
-              const SizedBox(height: Dimensions.paddingSizeSmall),
-              // Type options
-              ...provider.typeOptions.map((type) {
-                String displayText;
-                IconData iconData;
-                
-                switch (type) {
-                  case 'Distributor':
-                    displayText = 'Distributor ڈسٹری بیوٹر';
-                    iconData = Icons.warehouse;
-                    break;
-                  case 'FOS':
-                    displayText = 'FOS ایف او ایس';
-                    iconData = Icons.support_agent;
-                    break;
-                  case 'Retailer':
-                    displayText = 'Retailer خوردہ فروش';
-                    iconData = Icons.store;
-                    break;
-                  default:
-                    displayText = type;
-                    iconData = Icons.category;
-                }
-                
-                return ListTile(
-                    title: Text(
-                      displayText,
-                      style: robotoRegular(context).copyWith(
-                        fontSize: Dimensions.fontSizeLarge(context),
-                      ),
-                    ),
-                    leading: Icon(
-                      iconData,
-                      color: theme.primaryColor,
-                    ),
-                    trailing: provider.selectedType == type
-                        ? Icon(Icons.check, color: theme.primaryColor)
-                        : null,
-                    onTap: () {
-                      provider.setSelectedType(type);
-                      Navigator.pop(bottomSheetContext);
-                    },
-                  );
-              }),
-              const SizedBox(height: Dimensions.paddingSizeDefault),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
+
+
+
+
+
+
 
 

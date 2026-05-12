@@ -2,9 +2,9 @@
 //
 // Parses the login API response:
 // {
-//   "status": true,
+//   "success": true,  // or "status": true
 //   "message": "Login successful",
-//   "data": { ... }
+//   "data": { ... }   // or "user": { ... }
 // }
 
 class LoginResponseModel {
@@ -19,10 +19,16 @@ class LoginResponseModel {
   });
 
   factory LoginResponseModel.fromJson(Map<String, dynamic> json) {
+    // Handle both 'success' and 'status' fields
+    bool statusValue = json['success'] ?? json['status'] ?? false;
+
+    // Handle both 'data' and 'user' fields for user data
+    Map<String, dynamic>? userData = json['data'] ?? json['user'];
+
     return LoginResponseModel(
-      status: json['status'] ?? false,
+      status: statusValue,
       message: json['message']?.toString() ?? '',
-      data: json['data'] != null ? LoginUserData.fromJson(json['data']) : null,
+      data: userData != null ? LoginUserData.fromJson(userData) : null,
     );
   }
 

@@ -12,9 +12,9 @@ class CountryModel {
   });
 
   factory CountryModel.fromJson(Map<String, dynamic> json) => CountryModel(
-    id: json["id"] ?? 0,
-    name: json["name"] ?? '',
-    code: json["code"],
+    id: int.tryParse(json["id"]?.toString() ?? "0") ?? 0,
+    name: json["name"]?.toString() ?? json["country_name"]?.toString() ?? '',
+    code: json["code"]?.toString() ?? json["country_code"]?.toString(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -47,9 +47,9 @@ class StateModel {
   });
 
   factory StateModel.fromJson(Map<String, dynamic> json) => StateModel(
-    id: json["id"] ?? 0,
-    name: json["name"] ?? '',
-    countryId: json["country_id"] ?? 0,
+    id: int.tryParse(json["id"]?.toString() ?? "0") ?? 0,
+    name: json["name"]?.toString() ?? json["state_name"]?.toString() ?? '',
+    countryId: int.tryParse(json["country_id"]?.toString() ?? "0") ?? 0,
   );
 
   Map<String, dynamic> toJson() => {
@@ -82,9 +82,9 @@ class CityModel {
   });
 
   factory CityModel.fromJson(Map<String, dynamic> json) => CityModel(
-    id: json["id"] ?? 0,
-    name: json["name"] ?? '',
-    stateId: json["state_id"] ?? 0,
+    id: int.tryParse(json["id"]?.toString() ?? "0") ?? 0,
+    name: json["name"]?.toString() ?? json["city_name"]?.toString() ?? '',
+    stateId: int.tryParse(json["state_id"]?.toString() ?? "0") ?? 0,
   );
 
   Map<String, dynamic> toJson() => {

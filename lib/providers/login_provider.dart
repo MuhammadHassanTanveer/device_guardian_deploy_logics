@@ -21,7 +21,7 @@ class LoginProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('${AppConstants.baseUrl}/login_user_api'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'email': email,
@@ -269,7 +269,7 @@ class LoginProvider with ChangeNotifier {
       debugPrint("getPinCode: Fetching pin code...");
 
       final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_pin_code'),
+        Uri.parse('${AppConstants.baseUrl}/api/mobile/get-pin-cod'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

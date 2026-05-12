@@ -89,7 +89,7 @@ class AppVersionModel {
       'iphone_video_url': iphoneVideoUrl,
       'bank_name': bankName,
       'account_title': accountTitle,
-      'acount_no': accountNo,
+      'account_no': accountNo,
     };
   }
 }
