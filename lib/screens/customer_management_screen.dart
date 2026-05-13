@@ -217,7 +217,14 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
               debugPrint('Entered PIN: "$enteredPin" | Stored PIN: "$storedPin"');
               
               if (enteredPin.isEmpty) {
-                showCustomSnackBar(context, 'Please enter PIN', isError: true);
+                // Show snackbar using ScaffoldMessenger
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please enter PIN'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 2),
+                  ),
+                );
                 return;
               }
 
@@ -234,7 +241,16 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
               } else {
                 debugPrint('❌ PIN DOES NOT MATCH!');
                 setState(() => isVerifying = false);
-                showCustomSnackBar(context, 'PIN does not match', isError: true);
+                _pinController.clear(); // Clear the wrong PIN
+
+                // Show snackbar using ScaffoldMessenger to ensure it displays
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  const SnackBar(
+                    content: Text('PIN does not match. Please try again.'),
+                    backgroundColor: Colors.red,
+                    duration: Duration(seconds: 3),
+                  ),
+                );
               }
             }
 
@@ -306,9 +322,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     debugPrint('========================================');
     debugPrint('Sending Command: $status');
     debugPrint('Customer ID: ${widget.customerId}');
+    debugPrint('Using API: /mobile/notifications/send');
     debugPrint('========================================');
     
-    final ok = await context.read<CustomerProvider>().sendUserNotificationAndRefresh(
+    final ok = await context.read<CustomerProvider>().sendMobileNotification(
       customerId: widget.customerId,
       status: status,
     );
@@ -319,7 +336,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   // Method to handle Get Location with 2-second delay API call
   Future<void> _handleGetLocation() async {
     // First, send the get_current_location command
-    final ok = await context.read<CustomerProvider>().sendUserNotificationAndRefresh(
+    final ok = await context.read<CustomerProvider>().sendMobileNotification(
       customerId: widget.customerId,
       status: 'get_current_location',
     );
@@ -360,7 +377,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   // Method to handle Get SIM Details with 2-second delay API call
   Future<void> _handleGetSimDetails() async {
     // First, send the get_sim_details command
-    final ok = await context.read<CustomerProvider>().sendUserNotificationAndRefresh(
+    final ok = await context.read<CustomerProvider>().sendMobileNotification(
       customerId: widget.customerId,
       status: 'get_sim_details',
     );
@@ -1088,35 +1105,72 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                                         ],
                                       ),
                                       const SizedBox(height: 8),
-                                      // Status Badge (lock/unlock)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: customer.status.toLowerCase() == 'lock' 
-                                              ? Colors.red 
-                                              : Colors.green,
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              customer.status.toLowerCase() == 'lock' 
-                                                  ? Icons.lock 
-                                                  : Icons.lock_open,
-                                              color: Colors.white,
-                                              size: 14,
+                                      // Status Badges (lock_status and actual_lock_status)
+                                      Wrap(
+                                        spacing: 8,
+                                        runSpacing: 4,
+                                        children: [
+                                          // Lock Status Badge
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: customer.lockStatus
+                                                  ? Colors.red
+                                                  : Colors.green,
+                                              borderRadius: BorderRadius.circular(12),
                                             ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              customer.status.toUpperCase(),
-                                              style: robotoBold(context).copyWith(
-                                                color: Colors.white,
-                                                fontSize: 11,
-                                              ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  customer.lockStatus
+                                                      ? Icons.lock
+                                                      : Icons.lock_open,
+                                                  color: Colors.white,
+                                                  size: 14,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  customer.lockStatus ? 'LOCK' : 'UNLOCK',
+                                                  style: robotoBold(context).copyWith(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                          // Actual Lock Status Badge
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: customer.actualLockStatus
+                                                  ? Colors.deepOrange
+                                                  : Colors.lightGreen,
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  customer.actualLockStatus
+                                                      ? Icons.shield_outlined
+                                                      : Icons.shield,
+                                                  color: Colors.white,
+                                                  size: 14,
+                                                ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  customer.actualLockStatus ? 'ACTUAL LOCK' : 'ACTUAL UNLOCK',
+                                                  style: robotoBold(context).copyWith(
+                                                    color: Colors.white,
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
@@ -1265,35 +1319,72 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                           ],
                         ),
                         const SizedBox(height: 8),
-                        // Status Badge
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: customer.status.toLowerCase() == 'lock' 
-                                ? Colors.red 
-                                : Colors.green,
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                customer.status.toLowerCase() == 'lock' 
-                                    ? Icons.lock 
-                                    : Icons.lock_open,
-                                color: Colors.white,
-                                size: 14,
+                        // Status Badges
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            // Lock Status Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: customer.lockStatus
+                                    ? Colors.red
+                                    : Colors.green,
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                              const SizedBox(width: 6),
-                              Text(
-                                customer.status.toUpperCase(),
-                                style: robotoBold(context).copyWith(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    customer.lockStatus
+                                        ? Icons.lock
+                                        : Icons.lock_open,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    customer.lockStatus ? 'LOCK' : 'UNLOCK',
+                                    style: robotoBold(context).copyWith(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
+                            ),
+                            // Actual Lock Status Badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: customer.actualLockStatus
+                                    ? Colors.deepOrange
+                                    : Colors.lightGreen,
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    customer.actualLockStatus
+                                        ? Icons.shield_outlined
+                                        : Icons.shield,
+                                    color: Colors.white,
+                                    size: 14,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    customer.actualLockStatus ? 'ACTUAL LOCK' : 'ACTUAL UNLOCK',
+                                    style: robotoBold(context).copyWith(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2451,8 +2542,21 @@ IMEI: ${customer.imei1}
       );
     }
     
-    // Display SIM data in grid
-    final simEntries = provider.simDetailsData!.entries.toList();
+    // Display SIM data in grid - only show specific fields
+    final allowedFields = [
+      'sim_count',
+      'sim1_network_name',
+      'sim1_number',
+      'sim1_country_iso',
+      'sim2_network_name',
+      'sim2_number',
+      'sim2_country_iso',
+    ];
+
+    final simEntries = provider.simDetailsData!.entries
+        .where((e) => allowedFields.contains(e.key))
+        .toList();
+
     final gridItems = simEntries.map((e) => _InfoGridItem(
       _getSimDetailIcon(e.key),
       _formatSimDetailKey(e.key),
@@ -2905,6 +3009,7 @@ IMEI: ${customer.imei1}
               ),
             ],
           ),
+
 
           // const SizedBox(height: Dimensions.paddingSizeSmall),
           // Row(
@@ -4196,7 +4301,7 @@ IMEI: ${customer.imei1}
   Future<void> _handleUninstall() async {
     final provider = context.read<CustomerProvider>();
     
-    final ok = await provider.sendUserNotificationAndRefresh(
+    final ok = await provider.sendMobileNotification(
       customerId: widget.customerId,
       status: 'uninstall',
     );

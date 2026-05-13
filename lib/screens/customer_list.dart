@@ -718,17 +718,40 @@ class _CustomersListScreenState extends State<CustomersListScreen> {
                                                     .substring(0, 10),
                                               ),
                                               const SizedBox(height: 2),
-                                              if (customer.isActive == 2)
-                                                Text(
-                                                  'Uninstall',
-                                                  style: robotoBold(context).copyWith(
-                                                    fontSize: 10,
-                                                    color: Colors.red,
+                                              // Status based on is_active: 0=Inactive, 1=Active, 2=Uninstall
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    'Status: ',
+                                                    style: robotoBold(context).copyWith(fontSize: 10),
                                                   ),
-                                                ),
-                                              Text(
-                                                'Status: $statusDevice',
-                                                style: robotoBold(context).copyWith(fontSize: 10),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: customer.isActive == 0
+                                                          ? Colors.orange.withValues(alpha: 0.2)
+                                                          : customer.isActive == 1
+                                                              ? Colors.green.withValues(alpha: 0.2)
+                                                              : Colors.red.withValues(alpha: 0.2),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      customer.isActive == 0
+                                                          ? 'Inactive'
+                                                          : customer.isActive == 1
+                                                              ? 'Active'
+                                                              : 'Uninstall',
+                                                      style: robotoBold(context).copyWith(
+                                                        fontSize: 10,
+                                                        color: customer.isActive == 0
+                                                            ? Colors.orange[800]
+                                                            : customer.isActive == 1
+                                                                ? Colors.green[800]
+                                                                : Colors.red[800],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),

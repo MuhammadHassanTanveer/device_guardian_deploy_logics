@@ -235,6 +235,7 @@ class Datum {
   final DateTime? updatedAt;
   final int isActive;
   final bool lockStatus; // New field from API
+  final bool actualLockStatus; // Actual lock status from device
   final String serialNo;
   final String fcmToken;
   // New fields
@@ -254,7 +255,8 @@ class Datum {
   final String uuid;
   final String cnicFrontImage;
   final String cnicBackImage;
-  final String profileImage;
+  final String profileImage; // Maps to customer_image or profile_image
+  final List<String> mobileImages; // New: array of mobile document images
 
   Datum({
     required this.id,
@@ -299,6 +301,7 @@ class Datum {
     this.updatedAt,
     required this.isActive,
     required this.lockStatus,
+    required this.actualLockStatus,
     required this.serialNo,
     required this.fcmToken,
     required this.actualDeviceStatus,
@@ -318,6 +321,7 @@ class Datum {
     required this.cnicFrontImage,
     required this.cnicBackImage,
     required this.profileImage,
+    this.mobileImages = const [], // Default to empty list
   });
 
   factory Datum.fromJson(Map<String, dynamic> json) {
@@ -387,6 +391,22 @@ class Datum {
       lockStatusValue = json["lock_status"].toLowerCase() == 'true' || json["lock_status"] == '1';
     }
     
+    // Parse actual_lock_status - can be bool or int
+    bool actualLockStatusValue = false;
+    if (json["actual_lock_status"] is bool) {
+      actualLockStatusValue = json["actual_lock_status"];
+    } else if (json["actual_lock_status"] is int) {
+      actualLockStatusValue = json["actual_lock_status"] == 1;
+    } else if (json["actual_lock_status"] is String) {
+      actualLockStatusValue = json["actual_lock_status"].toLowerCase() == 'true' || json["actual_lock_status"] == '1';
+    }
+    
+    // Parse mobile_images array
+    List<String> mobileImagesList = [];
+    if (json["mobile_images"] != null && json["mobile_images"] is List) {
+      mobileImagesList = List<String>.from(json["mobile_images"].map((x) => x.toString()));
+    }
+    
     return Datum(
       id: json["id"] ?? 0,
       hashId: json["hash_id"],
@@ -395,7 +415,8 @@ class Datum {
       // Handle both old field (customer_mobile_no) and new field (contact_number)
       customerMobileNo: json["contact_number"] ?? json["customer_mobile_no"] ?? '',
       email: json["email"] ?? '',
-      cnic: json["cnic"] ?? '',
+      // Handle both cnic_number (new API) and cnic (old API)
+      cnic: json["cnic_number"] ?? json["cnic"] ?? '',
       country: countryId,
       state: stateId,
       city: cityId,
@@ -431,6 +452,7 @@ class Datum {
       updatedAt: json["updated_at"] != null ? DateTime.parse(json["updated_at"]) : null,
       isActive: _parseIsActive(json["is_active"]),
       lockStatus: lockStatusValue,
+      actualLockStatus: actualLockStatusValue,
       serialNo: json["serial_no"] ?? '',
       fcmToken: json["fcm_token"] ?? '',
       // New fields with null safety
@@ -450,7 +472,9 @@ class Datum {
       uuid: json["uuid"] ?? '',
       cnicFrontImage: json["cnic_front_image"] ?? '',
       cnicBackImage: json["cnic_back_image"] ?? '',
-      profileImage: json["profile_image"] ?? '',
+      // Handle both customer_image (new API) and profile_image (old API)
+      profileImage: json["customer_image"] ?? json["profile_image"] ?? '',
+      mobileImages: mobileImagesList,
     );
   }
 
@@ -523,6 +547,7 @@ class Datum {
     "updated_at": updatedAt?.toIso8601String(),
     "is_active": isActive,
     "lock_status": lockStatus,
+    "actual_lock_status": actualLockStatus,
     "serial_no": serialNo,
     "fcm_token": fcmToken,
     "actual_device_status": actualDeviceStatus,
@@ -542,6 +567,8 @@ class Datum {
     "cnic_front_image": cnicFrontImage,
     "cnic_back_image": cnicBackImage,
     "profile_image": profileImage,
+    "customer_image": profileImage,
+    "mobile_images": mobileImages,
   };
 
   /// Creates a copy of this Datum with the given fields replaced with new values
@@ -588,6 +615,7 @@ class Datum {
     DateTime? updatedAt,
     int? isActive,
     bool? lockStatus,
+    bool? actualLockStatus,
     String? serialNo,
     String? fcmToken,
     String? actualDeviceStatus,
@@ -607,6 +635,7 @@ class Datum {
     String? cnicFrontImage,
     String? cnicBackImage,
     String? profileImage,
+    List<String>? mobileImages,
   }) {
     return Datum(
       id: id ?? this.id,
@@ -651,6 +680,7 @@ class Datum {
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
       lockStatus: lockStatus ?? this.lockStatus,
+      actualLockStatus: actualLockStatus ?? this.actualLockStatus,
       serialNo: serialNo ?? this.serialNo,
       fcmToken: fcmToken ?? this.fcmToken,
       actualDeviceStatus: actualDeviceStatus ?? this.actualDeviceStatus,
@@ -670,6 +700,7 @@ class Datum {
       cnicFrontImage: cnicFrontImage ?? this.cnicFrontImage,
       cnicBackImage: cnicBackImage ?? this.cnicBackImage,
       profileImage: profileImage ?? this.profileImage,
+      mobileImages: mobileImages ?? this.mobileImages,
     );
   }
 }

@@ -1151,6 +1151,7 @@ class CustomerProvider with ChangeNotifier {
   List<String> removedDocuments = [];
 
   // Public function to get single customer from API
+  // GET: api/mobile/customers/{customerId}
   Future<void> getSingleCustomer(BuildContext context, int customerId) async {
     // Only show loading if we don't have data yet
     if (singleCustomer == null) {
@@ -1162,7 +1163,8 @@ class CustomerProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token') ?? '';
 
-      final url = '${AppConstants.baseUrl}/get_single_user_devices_api?customer_id=$customerId';
+      // New API endpoint: api/mobile/customers/{customerId}
+      final url = '${AppConstants.baseUrl}/mobile/customers/$customerId';
 
       debugPrint("Single Customer API URL: $url");
 
@@ -1179,17 +1181,21 @@ class CustomerProvider with ChangeNotifier {
         debugPrint("Single Customer API success response");
         final jsonData = json.decode(response.body);
 
-        if (jsonData['success'] == true && jsonData['Data'] != null) {
+        // Support both old format (Data) and new format (data)
+        final customerData = jsonData['Data'] ?? jsonData['data'];
+        final isSuccess = jsonData['success'] == true || jsonData['status'] == true || customerData != null;
+
+        if (isSuccess && customerData != null) {
           // Debug: Log raw location data from API
           debugPrint('=== RAW LOCATION DATA FROM API ===');
-          debugPrint('Raw country: ${jsonData['Data']['country']} (type: ${jsonData['Data']['country'].runtimeType})');
-          debugPrint('Raw state: ${jsonData['Data']['state']} (type: ${jsonData['Data']['state'].runtimeType})');
-          debugPrint('Raw city: ${jsonData['Data']['city']} (type: ${jsonData['Data']['city'].runtimeType})');
-          debugPrint('Raw is_active: ${jsonData['Data']['is_active']} (type: ${jsonData['Data']['is_active'].runtimeType})');
+          debugPrint('Raw country: ${customerData['country']} (type: ${customerData['country'].runtimeType})');
+          debugPrint('Raw state: ${customerData['state']} (type: ${customerData['state'].runtimeType})');
+          debugPrint('Raw city: ${customerData['city']} (type: ${customerData['city'].runtimeType})');
+          debugPrint('Raw is_active: ${customerData['is_active']} (type: ${customerData['is_active'].runtimeType})');
           debugPrint('==================================');
           
-          singleCustomer = Datum.fromJson(jsonData['Data']);
-          
+          singleCustomer = Datum.fromJson(customerData);
+
           // Debug: Log parsed location IDs
           debugPrint('=== PARSED LOCATION IDs ===');
           debugPrint('Parsed country ID: ${singleCustomer!.country}');
@@ -1199,16 +1205,22 @@ class CustomerProvider with ChangeNotifier {
           debugPrint('===========================');
 
           debugPrint('=== LOADING CUSTOMER IMAGES DEBUG ===');
+          debugPrint('mobileImages list: ${singleCustomer!.mobileImages}');
           debugPrint('Raw mobilePicture field: ${singleCustomer!.mobilePicture}');
           debugPrint('Raw documents field: ${singleCustomer!.documents}');
 
-          // Parse existing images from JSON strings
-          if (singleCustomer!.mobilePicture.isNotEmpty) {
+          // Use mobileImages list from new API format first
+          if (singleCustomer!.mobileImages.isNotEmpty) {
+            existingMobilePictures = List<String>.from(singleCustomer!.mobileImages);
+            debugPrint('✅ Using mobileImages list: ${existingMobilePictures.length} mobile pictures');
+            debugPrint('Mobile pictures: $existingMobilePictures');
+          } else if (singleCustomer!.mobilePicture.isNotEmpty) {
+            // Fallback to parsing mobilePicture as JSON string (old API format)
             try {
               final mobilePics = json.decode(singleCustomer!.mobilePicture);
               if (mobilePics is List) {
                 existingMobilePictures = List<String>.from(mobilePics);
-                debugPrint('✅ Parsed ${existingMobilePictures.length} mobile pictures');
+                debugPrint('✅ Parsed ${existingMobilePictures.length} mobile pictures from JSON string');
                 debugPrint('Mobile pictures: $existingMobilePictures');
               }
             } catch (e) {
@@ -1216,7 +1228,7 @@ class CustomerProvider with ChangeNotifier {
               existingMobilePictures = [];
             }
           } else {
-            debugPrint('⚠️ mobilePicture field is empty');
+            debugPrint('⚠️ No mobile pictures found');
             existingMobilePictures = [];
           }
 
@@ -1613,7 +1625,7 @@ class CustomerProvider with ChangeNotifier {
 
 
   /// Fetch single user's devices/status for a customer id
-  /// GET: http://100.113.207.78:8001/api/get_single_user_devices_api?customer_id=<id>
+  /// GET: api/mobile/customers/{customerId}
   /// [showLoading] - if false, won't show full screen loading (used for silent refresh after commands)
   Future<void> fetchSingleUserDevicesForCustomer(int customerId, {bool showLoading = false}) async {
     if (showLoading && singleUserDeviceStatus == null) {
@@ -1623,7 +1635,8 @@ class CustomerProvider with ChangeNotifier {
     }
 
     try {
-      final url = '${AppConstants.baseUrl}/get_single_user_devices_api?customer_id=$customerId';
+      // New API endpoint: api/mobile/customers/{customerId}
+      final url = '${AppConstants.baseUrl}/mobile/customers/$customerId';
       // If this API is protected, include Bearer token (same token used elsewhere in app)
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token') ?? '';
@@ -1639,8 +1652,10 @@ class CustomerProvider with ChangeNotifier {
 
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body);
-        if (decoded is Map && decoded['Data'] is Map) {
-          singleUserDeviceStatus = decoded['Data']['status']?.toString() ?? 'unlock';
+        // Support both old format (Data) and new format (data)
+        final customerData = decoded['Data'] ?? decoded['data'];
+        if (decoded is Map && customerData is Map) {
+          singleUserDeviceStatus = customerData['status']?.toString() ?? 'unlock';
         } else {
           singleUserDeviceStatus = 'unlock';
         }
@@ -1730,6 +1745,99 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
+  /// Send mobile notification using POST api/mobile/notifications/send
+  /// @param customerId - customer ID
+  /// @param status - notification status/message
+  Future<bool> sendMobileNotification({
+    required int customerId,
+    required String status,
+  }) async {
+    // Set the loading state for this specific command
+    commandLoadingStates['send_notification'] = true;
+    notifyListeners();
+
+    try {
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/notifications/send');
+      final prefs = await SharedPreferences.getInstance();
+      final authToken = prefs.getString('auth_token') ?? '';
+
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      if (authToken.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $authToken';
+      }
+
+      debugPrint('========================================');
+      debugPrint('Sending Mobile Notification');
+      debugPrint('URL: $url');
+      debugPrint('Headers: $headers');
+      debugPrint('Customer ID: $customerId');
+      debugPrint('Status: $status');
+      debugPrint('Auth Token: ${authToken.isNotEmpty ? "Present (${authToken.length} chars)" : "Missing"}');
+      debugPrint('========================================');
+
+      // Using form-urlencoded format (like Postman default)
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: <String, String>{
+          'customer_id': customerId.toString(),
+          'status': status,
+        },
+      );
+      
+      // Alternative: If API expects JSON format, replace above with:
+      // final headers = <String, String>{
+      //   'Accept': 'application/json',
+      //   'Content-Type': 'application/json',
+      // };
+      // if (authToken.isNotEmpty) {
+      //   headers['Authorization'] = 'Bearer $authToken';
+      // }
+      // final response = await http.post(
+      //   url,
+      //   headers: headers,
+      //   body: jsonEncode({
+      //     'customer_id': customerId,
+      //     'status': status,
+      //   }),
+      // );
+
+      debugPrint('========================================');
+      debugPrint('Mobile Notification Response');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('Response Body: ${response.body}');
+      debugPrint('Response Headers: ${response.headers}');
+      debugPrint('========================================');
+
+      if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        return false;
+      }
+
+      final ok = response.statusCode == 200 || response.statusCode == 201;
+      
+      if (!ok) {
+        debugPrint('❌ Error: API returned status ${response.statusCode}');
+        debugPrint('Response: ${response.body}');
+      } else {
+        debugPrint('✅ Mobile notification sent successfully');
+      }
+      
+      return ok;
+    } catch (e, stackTrace) {
+      debugPrint('❌ Exception sending mobile notification: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return false;
+    } finally {
+      // Reset the loading state
+      commandLoadingStates['send_notification'] = false;
+      notifyListeners();
+    }
+  }
+
   // Location fetch state
   bool isLocationLoading = false;
   String? locationError;
@@ -1815,14 +1923,14 @@ class CustomerProvider with ChangeNotifier {
   Map<String, dynamic>? simDetailsData;
 
   /// Fetch SIM details for a customer
-  /// GET: api/get_device_sim_details?customer_id=<id>
+  /// GET: api/mobile/sim-details/customer/{customer_id}
   Future<bool> fetchSimDetails(int customerId) async {
     isSimDetailsLoading = true;
     simDetailsError = null;
     notifyListeners();
 
     try {
-      final url = Uri.parse('${AppConstants.baseUrl}/get_device_sim_details?customer_id=$customerId');
+      final url = Uri.parse('${AppConstants.baseUrl}/mobile/sim-details/customer/$customerId');
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token') ?? '';
 
