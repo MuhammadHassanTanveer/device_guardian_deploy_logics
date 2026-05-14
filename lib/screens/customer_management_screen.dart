@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:screenshot/screenshot.dart';
@@ -44,18 +45,78 @@ class _InfoGridItem {
 
 // List of all supported social apps
 const List<SocialApp> allSocialApps = [
-  SocialApp(name: 'Facebook', commandName: 'facebook', icon: Icons.facebook, color: Color(0xFF1877F2)),
-  SocialApp(name: 'Messenger', commandName: 'messenger', icon: Icons.message, color: Color(0xFF00B2FF)),
-  SocialApp(name: 'WhatsApp', commandName: 'whatsapp', icon: Icons.chat, color: Color(0xFF25D366)),
-  SocialApp(name: 'WhatsApp Business', commandName: 'whatsappbusiness', icon: Icons.business, color: Color(0xFF128C7E)),
-  SocialApp(name: 'TikTok', commandName: 'tiktok', icon: Icons.music_note, color: Color(0xFF000000)),
-  SocialApp(name: 'Instagram', commandName: 'instagram', icon: Icons.camera_alt, color: Color(0xFFE4405F)),
-  SocialApp(name: 'Snapchat', commandName: 'snapchat', icon: Icons.camera, color: Color(0xFFFFFC00)),
-  SocialApp(name: 'LinkedIn', commandName: 'linkedin', icon: Icons.work, color: Color(0xFF0A66C2)),
-  SocialApp(name: 'YouTube', commandName: 'youtube', icon: Icons.play_circle_filled, color: Color(0xFFFF0000)),
-  SocialApp(name: 'Threads', commandName: 'threads', icon: Icons.alternate_email, color: Color(0xFF000000)),
-  SocialApp(name: 'X (Twitter)', commandName: 'twitter', icon: Icons.tag, color: Color(0xFF000000)),
-  SocialApp(name: 'Discord', commandName: 'discord', icon: Icons.headset_mic, color: Color(0xFF5865F2)),
+  SocialApp(
+    name: 'Facebook',
+    commandName: 'facebook',
+    icon: Icons.facebook,
+    color: Color(0xFF1877F2),
+  ),
+  SocialApp(
+    name: 'Messenger',
+    commandName: 'messenger',
+    icon: Icons.message,
+    color: Color(0xFF00B2FF),
+  ),
+  SocialApp(
+    name: 'WhatsApp',
+    commandName: 'whatsapp',
+    icon: Icons.chat,
+    color: Color(0xFF25D366),
+  ),
+  SocialApp(
+    name: 'WhatsApp Business',
+    commandName: 'whatsappbusiness',
+    icon: Icons.business,
+    color: Color(0xFF128C7E),
+  ),
+  SocialApp(
+    name: 'TikTok',
+    commandName: 'tiktok',
+    icon: Icons.music_note,
+    color: Color(0xFF000000),
+  ),
+  SocialApp(
+    name: 'Instagram',
+    commandName: 'instagram',
+    icon: Icons.camera_alt,
+    color: Color(0xFFE4405F),
+  ),
+  SocialApp(
+    name: 'Snapchat',
+    commandName: 'snapchat',
+    icon: Icons.camera,
+    color: Color(0xFFFFFC00),
+  ),
+  SocialApp(
+    name: 'LinkedIn',
+    commandName: 'linkedin',
+    icon: Icons.work,
+    color: Color(0xFF0A66C2),
+  ),
+  SocialApp(
+    name: 'YouTube',
+    commandName: 'youtube',
+    icon: Icons.play_circle_filled,
+    color: Color(0xFFFF0000),
+  ),
+  SocialApp(
+    name: 'Threads',
+    commandName: 'threads',
+    icon: Icons.alternate_email,
+    color: Color(0xFF000000),
+  ),
+  SocialApp(
+    name: 'X (Twitter)',
+    commandName: 'twitter',
+    icon: Icons.tag,
+    color: Color(0xFF000000),
+  ),
+  SocialApp(
+    name: 'Discord',
+    commandName: 'discord',
+    icon: Icons.headset_mic,
+    color: Color(0xFF5865F2),
+  ),
 ];
 
 class CustomerManagementScreen extends StatefulWidget {
@@ -72,74 +133,83 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _pinController = TextEditingController();
   late TabController _tabController;
-  
+
   // Screenshot controller for capturing screen
   final ScreenshotController _screenshotController = ScreenshotController();
   bool _isCapturingScreenshot = false;
-  
+
   // SharedPreferences key for hidden apps
   static const String _hiddenAppsKey = 'hidden_social_apps';
-  
+
   // Stored PIN code from SharedPreferences
   String? _storedPinCode;
-  
+
   // State to control SIM details card visibility in Commands tab
   bool _showSimDetailsCardInCommands = false;
+
+  // State to control unlock code visibility in Customer Information section
+  bool _isUnlockCodeVisible = false;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    
+
     // Add listener to check PIN when Commands tab is selected
     _tabController.addListener(_onTabChanged);
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCustomerData();
     });
   }
-  
+
   // Load all customer data in parallel for faster loading
   Future<void> _loadCustomerData() async {
     final provider = context.read<CustomerProvider>();
-    
+
     // Clear old customer data first to avoid showing stale data
     provider.clearCustomerManagementData();
-    
+
     // Run all API calls in parallel for faster loading
     await Future.wait([
       provider.getSingleCustomer(context, widget.customerId),
       provider.fetchSingleUserDevicesForCustomer(widget.customerId),
       provider.fetchCustomerEmi(widget.customerId),
-      provider.fetchSimDetails(widget.customerId), // Fetch SIM details on screen open
+      provider.fetchSimDetails(
+        widget.customerId,
+      ), // Fetch SIM details on screen open
     ]);
-    
+
     // Fetch location data (country, state, city names) after customer is loaded
     final customer = provider.singleCustomer;
     if (customer != null) {
-      await provider.fetchLocationDataForCustomer(customer.country, customer.state);
+      await provider.fetchLocationDataForCustomer(
+        customer.country,
+        customer.state,
+      );
     }
-    
+
     // Check PIN after data is loaded
     _checkAndPrintStoredPin();
   }
-  
+
   // Method to check PIN when tab changes
   void _onTabChanged() {
-    if (_tabController.index == 2) { // Commands tab (index 2)
+    if (_tabController.index == 2) {
+      // Commands tab (index 2)
       _checkAndPrintStoredPin();
     }
   }
-  
+
   // Method to check and print stored PIN from SharedPreferences
   Future<void> _checkAndPrintStoredPin() async {
     final prefs = await SharedPreferences.getInstance();
     _storedPinCode = prefs.getString('pin_code');
-    
+
     debugPrint('================================================');
     debugPrint('CHECKING PIN CODE FROM SHARED PREFERENCES');
     debugPrint('================================================');
-    
+
     if (_storedPinCode == null || _storedPinCode!.isEmpty) {
       debugPrint('⚠️ WARNING: PIN CODE IS EMPTY OR NOT SET!');
       debugPrint('Stored PIN: null or empty');
@@ -184,20 +254,24 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   /// Returns true if PIN is verified, false otherwise
   Future<bool> _verifyPinWithDialog(String actionName) async {
     _pinController.clear();
-    
+
     // First, refresh the stored PIN from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     final storedPin = prefs.getString('pin_code')?.trim() ?? '';
-    
+
     debugPrint('================================================');
     debugPrint('PIN VERIFICATION FOR: $actionName');
     debugPrint('Stored PIN in SharedPreferences: "$storedPin"');
     debugPrint('================================================');
-    
+
     // Check if PIN is set
     if (storedPin.isEmpty) {
       if (!mounted) return false;
-      showCustomSnackBar(context, 'PIN is not set. Please set a PIN first.', isError: true);
+      showCustomSnackBar(
+        context,
+        'PIN is not set. Please set a PIN first.',
+        isError: true,
+      );
       return false;
     }
 
@@ -206,16 +280,18 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         bool isVerifying = false;
-        
+
         return StatefulBuilder(
           builder: (context, setState) {
             // Helper function to verify PIN
             Future<void> verifyPin() async {
               if (isVerifying) return;
-              
+
               final enteredPin = _pinController.text.trim();
-              debugPrint('Entered PIN: "$enteredPin" | Stored PIN: "$storedPin"');
-              
+              debugPrint(
+                'Entered PIN: "$enteredPin" | Stored PIN: "$storedPin"',
+              );
+
               if (enteredPin.isEmpty) {
                 // Show snackbar using ScaffoldMessenger
                 ScaffoldMessenger.of(dialogContext).showSnackBar(
@@ -229,10 +305,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
               }
 
               setState(() => isVerifying = true);
-              
+
               // Direct comparison with stored PIN
               final bool isMatch = enteredPin == storedPin;
-              
+
               debugPrint('PIN Match Result: $isMatch');
 
               if (isMatch) {
@@ -313,7 +389,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       debugPrint('✅ PIN verified, executing command: $command');
       await _sendCommand(command, successMessage);
     } else {
-      debugPrint('❌ PIN not verified or dialog cancelled, command NOT executed');
+      debugPrint(
+        '❌ PIN not verified or dialog cancelled, command NOT executed',
+      );
     }
   }
 
@@ -324,13 +402,17 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     debugPrint('Customer ID: ${widget.customerId}');
     debugPrint('Using API: /mobile/notifications/send');
     debugPrint('========================================');
-    
+
     final ok = await context.read<CustomerProvider>().sendMobileNotification(
       customerId: widget.customerId,
       status: status,
     );
     if (!mounted) return;
-    showCustomSnackBar(context, ok ? successMessage : 'Failed to send command', isError: !ok);
+    showCustomSnackBar(
+      context,
+      ok ? successMessage : 'Failed to send command',
+      isError: !ok,
+    );
   }
 
   // Method to handle Get Location with 2-second delay API call
@@ -340,29 +422,42 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       customerId: widget.customerId,
       status: 'get_current_location',
     );
-    
+
     if (!mounted) return;
-    
+
     if (ok) {
-      showCustomSnackBar(context, 'Location request sent. Fetching location...', isError: false);
-      
+      showCustomSnackBar(
+        context,
+        'Location request sent. Fetching location...',
+        isError: false,
+      );
+
       // Wait for 2 seconds before fetching location
       await Future.delayed(const Duration(seconds: 2));
-      
+
       if (!mounted) return;
-      
+
       // Fetch the location from the API
-      final locationFetched = await context.read<CustomerProvider>().fetchCustomerLocation(
-        widget.customerId,
-      );
-      
+      final locationFetched = await context
+          .read<CustomerProvider>()
+          .fetchCustomerLocation(widget.customerId);
+
       if (!mounted) return;
-      
+
       if (!locationFetched) {
-        showCustomSnackBar(context, context.read<CustomerProvider>().locationError ?? 'Failed to fetch location', isError: true);
+        showCustomSnackBar(
+          context,
+          context.read<CustomerProvider>().locationError ??
+              'Failed to fetch location',
+          isError: true,
+        );
       }
     } else {
-      showCustomSnackBar(context, 'Failed to send location command', isError: true);
+      showCustomSnackBar(
+        context,
+        'Failed to send location command',
+        isError: true,
+      );
     }
   }
 
@@ -381,34 +476,47 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       customerId: widget.customerId,
       status: 'get_sim_details',
     );
-    
+
     if (!mounted) return;
-    
+
     if (ok) {
-      showCustomSnackBar(context, 'SIM details request sent. Fetching details...', isError: false);
-      
+      showCustomSnackBar(
+        context,
+        'SIM details request sent. Fetching details...',
+        isError: false,
+      );
+
       // Wait for 2 seconds before fetching SIM details
       await Future.delayed(const Duration(seconds: 2));
-      
+
       if (!mounted) return;
-      
+
       // Fetch the SIM details from the API
-      final simDetailsFetched = await context.read<CustomerProvider>().fetchSimDetails(
-        widget.customerId,
-      );
-      
+      final simDetailsFetched = await context
+          .read<CustomerProvider>()
+          .fetchSimDetails(widget.customerId);
+
       if (!mounted) return;
-      
+
       if (simDetailsFetched) {
         // Show the SIM details card in Commands tab
         setState(() {
           _showSimDetailsCardInCommands = true;
         });
       } else {
-        showCustomSnackBar(context, context.read<CustomerProvider>().simDetailsError ?? 'Failed to fetch SIM details', isError: true);
+        showCustomSnackBar(
+          context,
+          context.read<CustomerProvider>().simDetailsError ??
+              'Failed to fetch SIM details',
+          isError: true,
+        );
       }
     } else {
-      showCustomSnackBar(context, 'Failed to send SIM details command', isError: true);
+      showCustomSnackBar(
+        context,
+        'Failed to send SIM details command',
+        isError: true,
+      );
     }
   }
 
@@ -423,9 +531,12 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   // Show Add EMI Details Dialog
   Future<void> _showUpdateEmiDetailsDialog(BuildContext context) async {
     final colorScheme = Theme.of(context).colorScheme;
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+    final customerProvider = Provider.of<CustomerProvider>(
+      context,
+      listen: false,
+    );
     final customerId = widget.customerId;
-    
+
     // Show the dialog and wait for result
     final result = await showDialog<Map<String, dynamic>?>(
       context: context,
@@ -444,8 +555,12 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       if (result['success'] == true) {
         // Refresh EMI data after successful addition
         await customerProvider.fetchCustomerEmi(customerId);
-        
-        showCustomSnackBar(context, result['message'] ?? 'EMI Details added successfully', isError: result['isWarning'] == true);
+
+        showCustomSnackBar(
+          context,
+          result['message'] ?? 'EMI Details added successfully',
+          isError: result['isWarning'] == true,
+        );
       } else if (result['error'] != null) {
         showCustomSnackBar(context, result['error'], isError: true);
       }
@@ -453,11 +568,17 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   }
 
   // Show Delete EMI Confirmation Dialog
-  Future<void> _showDeleteEmiDialog(BuildContext context) async {
-    final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+  Future<void> _showDeleteEmiDialog(
+    BuildContext context, {
+    required String emiId,
+  }) async {
+    final customerProvider = Provider.of<CustomerProvider>(
+      context,
+      listen: false,
+    );
     final customerId = widget.customerId;
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -541,7 +662,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -652,17 +775,24 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
 
     if (confirmed == true) {
+      if (emiId.isEmpty) {
+        showCustomSnackBar(
+          context,
+          'Unable to delete EMI: EMI ID not found',
+          isError: true,
+        );
+        return;
+      }
+
       // Show loading indicator
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
       // Call delete API
-      final result = await customerProvider.deleteCustomerEmi(customerId: customerId);
+      final result = await customerProvider.deleteCustomerEmi(emiId: emiId);
 
       // Hide loading indicator
       if (context.mounted) {
@@ -674,10 +804,18 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       if (result['success'] == true) {
         // Refresh EMI data after successful deletion
         await customerProvider.fetchCustomerEmi(customerId);
-        
-        showCustomSnackBar(context, result['message'] ?? 'EMI deleted successfully', isError: false);
+
+        showCustomSnackBar(
+          context,
+          result['message'] ?? 'EMI deleted successfully',
+          isError: false,
+        );
       } else {
-        showCustomSnackBar(context, result['error'] ?? 'Failed to delete EMI', isError: true);
+        showCustomSnackBar(
+          context,
+          result['error'] ?? 'Failed to delete EMI',
+          isError: true,
+        );
       }
     }
   }
@@ -690,7 +828,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
     // Now show the new password dialog
     final newPasswordController = TextEditingController();
-    
+
     final newPassword = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -753,7 +891,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
     if (newPassword != null && newPassword.isNotEmpty) {
       // Dialog is already closed, now send the command
-      await _sendCommand('change_password_$newPassword', 'Screen password changed successfully');
+      await _sendCommand(
+        'change_password_$newPassword',
+        'Screen password changed successfully',
+      );
     }
   }
 
@@ -765,7 +906,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
     // Now show the message input dialog
     final messageController = TextEditingController();
-    
+
     final message = await showDialog<String>(
       context: context,
       barrierDismissible: false,
@@ -821,7 +962,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     if (message != null && message.isNotEmpty) {
       // Replace spaces with underscores
       final formattedMessage = message.replaceAll(' ', '_');
-      await _sendCommand('message_customer_$formattedMessage', 'Message sent to customer successfully');
+      await _sendCommand(
+        'message_customer_$formattedMessage',
+        'Message sent to customer successfully',
+      );
     }
   }
 
@@ -833,13 +977,19 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
     // Get already hidden apps
     final hiddenApps = await _getHiddenApps();
-    
+
     // Filter available apps (exclude already hidden ones)
-    final availableApps = allSocialApps.where((app) => !hiddenApps.contains(app.commandName)).toList();
-    
+    final availableApps = allSocialApps
+        .where((app) => !hiddenApps.contains(app.commandName))
+        .toList();
+
     if (availableApps.isEmpty) {
       if (!mounted) return;
-      showCustomSnackBar(context, 'All apps are already hidden', isError: false);
+      showCustomSnackBar(
+        context,
+        'All apps are already hidden',
+        isError: false,
+      );
       return;
     }
 
@@ -860,17 +1010,19 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     if (selectedApps != null && selectedApps.isNotEmpty) {
       // Check if "all" was selected
       final bool isSelectAll = selectedApps.contains('all');
-      
+
       String command;
       if (isSelectAll) {
         command = 'hide_apps_all';
         // Add all available apps to hidden list
-        await _addToHiddenApps(availableApps.map((e) => e.commandName).toList());
+        await _addToHiddenApps(
+          availableApps.map((e) => e.commandName).toList(),
+        );
       } else {
         command = 'hide_apps_${selectedApps.join('_')}';
         await _addToHiddenApps(selectedApps);
       }
-      
+
       await _sendCommand(command, 'Hide apps command sent successfully');
     }
   }
@@ -883,10 +1035,12 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
     // Get hidden apps
     final hiddenApps = await _getHiddenApps();
-    
+
     // Filter to show only hidden apps
-    final hiddenAppsList = allSocialApps.where((app) => hiddenApps.contains(app.commandName)).toList();
-    
+    final hiddenAppsList = allSocialApps
+        .where((app) => hiddenApps.contains(app.commandName))
+        .toList();
+
     if (hiddenAppsList.isEmpty) {
       if (!mounted) return;
       showCustomSnackBar(context, 'No hidden apps to show', isError: false);
@@ -910,17 +1064,19 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     if (selectedApps != null && selectedApps.isNotEmpty) {
       // Check if "all" was selected
       final bool isSelectAll = selectedApps.contains('all');
-      
+
       String command;
       if (isSelectAll) {
         command = 'show_apps_all';
         // Remove all hidden apps from the list
-        await _removeFromHiddenApps(hiddenAppsList.map((e) => e.commandName).toList());
+        await _removeFromHiddenApps(
+          hiddenAppsList.map((e) => e.commandName).toList(),
+        );
       } else {
         command = 'show_apps_${selectedApps.join('_')}';
         await _removeFromHiddenApps(selectedApps);
       }
-      
+
       await _sendCommand(command, 'Show apps command sent successfully');
     }
   }
@@ -938,13 +1094,21 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       await provider.fetchCustomers(context, isRefresh: true);
 
       if (!mounted) return;
-      
-      showCustomSnackBar(context, 'Customer re-activated successfully', isError: false);
-      
+
+      showCustomSnackBar(
+        context,
+        'Customer re-activated successfully',
+        isError: false,
+      );
+
       // Go back to customer list screen
       Navigator.of(context).pop();
     } else {
-      showCustomSnackBar(context, 'Failed to re-activate customer', isError: true);
+      showCustomSnackBar(
+        context,
+        'Failed to re-activate customer',
+        isError: true,
+      );
     }
   }
 
@@ -971,268 +1135,326 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
           : Screenshot(
               controller: _screenshotController,
               child: NestedScrollView(
-              headerSliverBuilder: (context, innerBoxIsScrolled) {
-                return [
-                  SliverAppBar(
-                    expandedHeight: 200,
-                    floating: false,
-                    pinned: true,
-                    elevation: 2,
-                    backgroundColor: Colors.white,
-                    surfaceTintColor: Colors.white,
-                    leading: IconButton(
-                      icon: Icon(Icons.arrow_back, color: colorScheme.primary),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    title: Text(
-                      customer.customerCode.isNotEmpty 
-                          ? customer.customerCode.toUpperCase() 
-                          : 'CUST-${customer.id}',
-                      style: robotoBold(context).copyWith(
-                        color: colorScheme.primary,
-                        fontSize: Dimensions.fontSizeLarge(context),
-                      ),
-                    ),
-                    actions: [
-                      IconButton(
-                        icon: _isCapturingScreenshot 
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: colorScheme.primary,
-                                ),
-                              )
-                            : Icon(Icons.share, color: colorScheme.primary),
-                        onPressed: _isCapturingScreenshot 
-                            ? null 
-                            : () => _captureAndShareScreenshot(customer),
-                      ),
-                    ],
-                    flexibleSpace: FlexibleSpaceBar(
-                      background: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
+                headerSliverBuilder: (context, innerBoxIsScrolled) {
+                  return [
+                    SliverAppBar(
+                      expandedHeight: 200,
+                      floating: false,
+                      pinned: true,
+                      elevation: 2,
+                      backgroundColor: Colors.white,
+                      surfaceTintColor: Colors.white,
+                      leading: IconButton(
+                        icon: Icon(
+                          Icons.arrow_back,
+                          color: colorScheme.primary,
                         ),
-                        child: SafeArea(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 56, left: 16, right: 16, bottom: 16),
-                            child: Row(
-                              children: [
-                                // Customer Profile Image
-                                Container(
-                                  width: 90,
-                                  height: 90,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: colorScheme.primary, width: 3),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.1),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                      title: Text(
+                        customer.customerCode.isNotEmpty
+                            ? customer.customerCode.toUpperCase()
+                            : 'CUST-${customer.id}',
+                        style: robotoBold(context).copyWith(
+                          color: colorScheme.primary,
+                          fontSize: Dimensions.fontSizeLarge(context),
+                        ),
+                      ),
+                      actions: [
+                        IconButton(
+                          icon: _isCapturingScreenshot
+                              ? SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.primary,
+                                  ),
+                                )
+                              : Icon(Icons.share, color: colorScheme.primary),
+                          onPressed: _isCapturingScreenshot
+                              ? null
+                              : () => _captureAndShareScreenshot(customer),
+                        ),
+                      ],
+                      flexibleSpace: FlexibleSpaceBar(
+                        background: Container(
+                          decoration: BoxDecoration(color: Colors.white),
+                          child: SafeArea(
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                top: 56,
+                                left: 16,
+                                right: 16,
+                                bottom: 16,
+                              ),
+                              child: Row(
+                                children: [
+                                  // Customer Profile Image
+                                  Container(
+                                    width: 90,
+                                    height: 90,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: colorScheme.primary,
+                                        width: 3,
                                       ),
-                                    ],
-                                  ),
-                                  child: ClipOval(
-                                    child: customer.profileImage.isNotEmpty
-                                        ? Image.network(
-                                            '${AppConstants.imageUrl}${customer.profileImage}',
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (context, error, stackTrace) {
-                                              return Container(
-                                                color: colorScheme.primary.withValues(alpha: 0.1),
-                                                child: Icon(
-                                                  Icons.person,
-                                                  size: 50,
-                                                  color: colorScheme.primary,
-                                                ),
-                                              );
-                                            },
-                                            loadingBuilder: (context, child, loadingProgress) {
-                                              if (loadingProgress == null) return child;
-                                              return Container(
-                                                color: Colors.grey[100],
-                                                child: Center(
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: colorScheme.primary,
-                                                  ),
-                                                ),
-                                              );
-                                            },
-                                          )
-                                        : Container(
-                                            color: colorScheme.primary.withValues(alpha: 0.1),
-                                            child: Icon(
-                                              Icons.person,
-                                              size: 50,
-                                              color: colorScheme.primary,
-                                            ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(
+                                            alpha: 0.1,
                                           ),
-                                  ),
-                                ),
-                                const SizedBox(width: 20),
-                                // Customer Info
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      // Customer Name
-                                      Text(
-                                        customer.customerName,
-                                        style: robotoBold(context).copyWith(
-                                          color: Colors.grey.shade800,
-                                          fontSize: Dimensions.fontSizeExtraLarge(context),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 4),
                                         ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.phone, color: Colors.grey.shade600, size: 16),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            customer.customerMobileNo,
-                                            style: robotoRegular(context).copyWith(
-                                              color: Colors.grey.shade600,
-                                              fontSize: Dimensions.fontSizeDefault(context),
+                                      ],
+                                    ),
+                                    child: ClipOval(
+                                      child: customer.profileImage.isNotEmpty
+                                          ? Image.network(
+                                              '${AppConstants.imageUrl}${customer.profileImage}',
+                                              fit: BoxFit.cover,
+                                              errorBuilder:
+                                                  (context, error, stackTrace) {
+                                                    return Container(
+                                                      color: colorScheme.primary
+                                                          .withValues(
+                                                            alpha: 0.1,
+                                                          ),
+                                                      child: Icon(
+                                                        Icons.person,
+                                                        size: 50,
+                                                        color:
+                                                            colorScheme.primary,
+                                                      ),
+                                                    );
+                                                  },
+                                              loadingBuilder:
+                                                  (
+                                                    context,
+                                                    child,
+                                                    loadingProgress,
+                                                  ) {
+                                                    if (loadingProgress == null)
+                                                      return child;
+                                                    return Container(
+                                                      color: Colors.grey[100],
+                                                      child: Center(
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                              color: colorScheme
+                                                                  .primary,
+                                                            ),
+                                                      ),
+                                                    );
+                                                  },
+                                            )
+                                          : Container(
+                                              color: colorScheme.primary
+                                                  .withValues(alpha: 0.1),
+                                              child: Icon(
+                                                Icons.person,
+                                                size: 50,
+                                                color: colorScheme.primary,
+                                              ),
                                             ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // Status Badges (lock_status and actual_lock_status)
-                                      Wrap(
-                                        spacing: 8,
-                                        runSpacing: 4,
-                                        children: [
-                                          // Lock Status Badge
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: customer.lockStatus
-                                                  ? Colors.red
-                                                  : Colors.green,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  customer.lockStatus
-                                                      ? Icons.lock
-                                                      : Icons.lock_open,
-                                                  color: Colors.white,
-                                                  size: 14,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  customer.lockStatus ? 'LOCK' : 'UNLOCK',
-                                                  style: robotoBold(context).copyWith(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          // Actual Lock Status Badge
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: customer.actualLockStatus
-                                                  ? Colors.deepOrange
-                                                  : Colors.lightGreen,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  customer.actualLockStatus
-                                                      ? Icons.shield_outlined
-                                                      : Icons.shield,
-                                                  color: Colors.white,
-                                                  size: 14,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  customer.actualLockStatus ? 'ACTUAL LOCK' : 'ACTUAL UNLOCK',
-                                                  style: robotoBold(context).copyWith(
-                                                    color: Colors.white,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(width: 20),
+                                  // Customer Info
+                                  Expanded(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Customer Name
+                                        Text(
+                                          customer.customerName,
+                                          style: robotoBold(context).copyWith(
+                                            color: Colors.grey.shade800,
+                                            fontSize:
+                                                Dimensions.fontSizeExtraLarge(
+                                                  context,
+                                                ),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.phone,
+                                              color: Colors.grey.shade600,
+                                              size: 16,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              customer.customerMobileNo,
+                                              style: robotoRegular(context)
+                                                  .copyWith(
+                                                    color: Colors.grey.shade600,
+                                                    fontSize:
+                                                        Dimensions.fontSizeDefault(
+                                                          context,
+                                                        ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        // Status Badges (lock_status and actual_lock_status)
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 4,
+                                          children: [
+                                            // Lock Status Badge
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: customer.lockStatus
+                                                    ? Colors.red
+                                                    : Colors.green,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    customer.lockStatus
+                                                        ? Icons.lock
+                                                        : Icons.lock_open,
+                                                    color: Colors.white,
+                                                    size: 14,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    customer.lockStatus
+                                                        ? 'LOCK'
+                                                        : 'UNLOCK',
+                                                    style: robotoBold(context)
+                                                        .copyWith(
+                                                          color: Colors.white,
+                                                          fontSize: 11,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            // Actual Lock Status Badge
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: customer.actualLockStatus
+                                                    ? Colors.deepOrange
+                                                    : Colors.lightGreen,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    customer.actualLockStatus
+                                                        ? Icons.shield_outlined
+                                                        : Icons.shield,
+                                                    color: Colors.white,
+                                                    size: 14,
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    customer.actualLockStatus
+                                                        ? 'ACTUAL LOCK'
+                                                        : 'ACTUAL UNLOCK',
+                                                    style: robotoBold(context)
+                                                        .copyWith(
+                                                          color: Colors.white,
+                                                          fontSize: 11,
+                                                        ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
+                      bottom: TabBar(
+                        controller: _tabController,
+                        indicatorColor: colorScheme.primary,
+                        indicatorWeight: 3,
+                        labelColor: colorScheme.primary,
+                        unselectedLabelColor: Colors.grey.shade500,
+                        tabs: const [
+                          Tab(text: 'Details'),
+                          Tab(text: 'Commands'),
+                          Tab(text: 'EMI Details'),
+                        ],
+                      ),
                     ),
-                    bottom: TabBar(
-                      controller: _tabController,
-                      indicatorColor: colorScheme.primary,
-                      indicatorWeight: 3,
-                      labelColor: colorScheme.primary,
-                      unselectedLabelColor: Colors.grey.shade500,
-                      tabs: const [
-                        Tab(text: 'Details'),
-                        Tab(text: 'Commands'),
-                        Tab(text: 'EMI Details'),
+                  ];
+                },
+                body: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        colorScheme.surface,
+                        colorScheme.tertiaryContainer,
                       ],
                     ),
                   ),
-                ];
-              },
-              body: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [colorScheme.surface, colorScheme.tertiaryContainer],
+                  child: TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildDetailsTab(context, provider),
+                      _buildCommandsTab(context, provider),
+                      _buildEmiDetailsTab(context, provider),
+                    ],
                   ),
-                ),
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildDetailsTab(context, provider),
-                    _buildCommandsTab(context, provider),
-                    _buildEmiDetailsTab(context, provider),
-                  ],
                 ),
               ),
             ),
-          ),
     );
   }
 
   // Build the COMPLETE full screen content for long screenshot
-  Widget _buildLongScreenshotContent(dynamic customer, CustomerProvider provider) {
+  Widget _buildLongScreenshotContent(
+    dynamic customer,
+    CustomerProvider provider,
+  ) {
     final colorScheme = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.of(context).size.width;
     final emiModel = provider.customerEmiModel;
     final customerEmi = emiModel?.data?.customerEmi;
     final emiDetails = emiModel?.data?.customerEmiDetails ?? [];
-    
+
     return Material(
       color: Colors.white,
       child: Container(
         width: screenWidth,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-        ),
+        decoration: const BoxDecoration(color: Colors.white),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1248,20 +1470,19 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                   const SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      customer.customerCode.isNotEmpty 
-                          ? customer.customerCode.toUpperCase() 
+                      customer.customerCode.isNotEmpty
+                          ? customer.customerCode.toUpperCase()
                           : 'CUST-${customer.id}',
-                      style: robotoBold(context).copyWith(
-                        color: colorScheme.primary,
-                        fontSize: 18,
-                      ),
+                      style: robotoBold(
+                        context,
+                      ).copyWith(color: colorScheme.primary, fontSize: 18),
                     ),
                   ),
                   Icon(Icons.share, color: colorScheme.primary, size: 24),
                 ],
               ),
             ),
-            
+
             // ========== CUSTOMER HEADER SECTION ==========
             Container(
               width: double.infinity,
@@ -1284,10 +1505,18 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                           ? Image.network(
                               '${AppConstants.imageUrl}${customer.profileImage}',
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => 
-                                  Icon(Icons.person, size: 45, color: colorScheme.primary),
+                              errorBuilder: (context, error, stackTrace) =>
+                                  Icon(
+                                    Icons.person,
+                                    size: 45,
+                                    color: colorScheme.primary,
+                                  ),
                             )
-                          : Icon(Icons.person, size: 45, color: colorScheme.primary),
+                          : Icon(
+                              Icons.person,
+                              size: 45,
+                              color: colorScheme.primary,
+                            ),
                     ),
                   ),
                   const SizedBox(width: 20),
@@ -1297,15 +1526,18 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                       children: [
                         Text(
                           customer.customerName,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.grey.shade800,
-                            fontSize: 20,
-                          ),
+                          style: robotoBold(
+                            context,
+                          ).copyWith(color: Colors.grey.shade800, fontSize: 20),
                         ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.phone, color: Colors.grey.shade600, size: 16),
+                            Icon(
+                              Icons.phone,
+                              color: Colors.grey.shade600,
+                              size: 16,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
@@ -1326,7 +1558,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                           children: [
                             // Lock Status Badge
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: customer.lockStatus
                                     ? Colors.red
@@ -1356,7 +1591,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                             ),
                             // Actual Lock Status Badge
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: customer.actualLockStatus
                                     ? Colors.deepOrange
@@ -1375,7 +1613,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    customer.actualLockStatus ? 'ACTUAL LOCK' : 'ACTUAL UNLOCK',
+                                    customer.actualLockStatus
+                                        ? 'ACTUAL LOCK'
+                                        : 'ACTUAL UNLOCK',
                                     style: robotoBold(context).copyWith(
                                       color: Colors.white,
                                       fontSize: 12,
@@ -1392,20 +1632,32 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 ],
               ),
             ),
-            
+
             // ========== TAB BAR SECTION ==========
             Container(
               width: double.infinity,
               color: Colors.white,
               child: Row(
                 children: [
-                  _buildScreenshotTab('Details', _tabController.index == 0, colorScheme.primary),
-                  _buildScreenshotTab('Commands', _tabController.index == 1, colorScheme.primary),
-                  _buildScreenshotTab('EMI Details', _tabController.index == 2, colorScheme.primary),
+                  _buildScreenshotTab(
+                    'Details',
+                    _tabController.index == 0,
+                    colorScheme.primary,
+                  ),
+                  _buildScreenshotTab(
+                    'Commands',
+                    _tabController.index == 1,
+                    colorScheme.primary,
+                  ),
+                  _buildScreenshotTab(
+                    'EMI Details',
+                    _tabController.index == 2,
+                    colorScheme.primary,
+                  ),
                 ],
               ),
             ),
-            
+
             // ========== MAIN CONTENT SECTION ==========
             Container(
               width: double.infinity,
@@ -1424,7 +1676,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                   _buildScreenshotCard(
                     title: 'Customer Information',
                     icon: Icons.person_outline,
-                    gradientColors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
+                    gradientColors: [
+                      const Color(0xFF667eea),
+                      const Color(0xFF764ba2),
+                    ],
                     child: Column(
                       children: [
                         // Customer Code with Cust ID label in bold
@@ -1441,7 +1696,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                               ),
                               Expanded(
                                 child: Text(
-                                  customer.customerCode.isNotEmpty ? customer.customerCode.toUpperCase() : 'N/A',
+                                  customer.customerCode.isNotEmpty
+                                      ? customer.customerCode.toUpperCase()
+                                      : 'N/A',
                                   style: robotoBold(context).copyWith(
                                     color: Colors.grey.shade800,
                                     fontSize: 14,
@@ -1452,117 +1709,281 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                           ),
                         ),
                         _buildScreenshotInfoRow('Name', customer.customerName),
-                        _buildScreenshotInfoRow('Phone', customer.customerMobileNo),
-                        _buildScreenshotInfoRow('Email', customer.email.isNotEmpty ? customer.email : 'N/A'),
-                        _buildScreenshotInfoRow('CNIC', customer.cnic.isNotEmpty ? customer.cnic : 'N/A'),
-                        _buildScreenshotInfoRow('Address', customer.address.isNotEmpty ? customer.address : 'N/A'),
-                        _buildScreenshotInfoRow('Country', provider.getCountryNameById(customer.country)),
-                        _buildScreenshotInfoRow('State', provider.getStateNameById(customer.state)),
-                        _buildScreenshotInfoRow('City', provider.getCityNameById(customer.city)),
+                        _buildScreenshotInfoRow(
+                          'Phone',
+                          customer.customerMobileNo,
+                        ),
+
+                        // Unlock Code with toggle visibility
+                        _buildUnlockCodeRow(
+                          customer.unlockCode != null &&
+                                  customer.unlockCode!.isNotEmpty
+                              ? customer.unlockCode!
+                              : 'N/A',
+                        ),
+
+                        _buildScreenshotInfoRow(
+                          'Email',
+                          customer.email.isNotEmpty ? customer.email : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'CNIC',
+                          customer.cnic.isNotEmpty ? customer.cnic : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Address',
+                          customer.address.isNotEmpty
+                              ? customer.address
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Country',
+                          provider.getCountryNameById(customer.country),
+                        ),
+                        _buildScreenshotInfoRow(
+                          'State',
+                          provider.getStateNameById(customer.state),
+                        ),
+                        _buildScreenshotInfoRow(
+                          'City',
+                          provider.getCityNameById(customer.city),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // ===== DEVICE INFORMATION CARD =====
                   _buildScreenshotCard(
                     title: 'Device Information',
                     icon: Icons.smartphone,
-                    gradientColors: [const Color(0xFF11998e), const Color(0xFF38ef7d)],
+                    gradientColors: [
+                      const Color(0xFF11998e),
+                      const Color(0xFF38ef7d),
+                    ],
                     child: Column(
                       children: [
-                        _buildScreenshotInfoRow('Mobile Type', customer.mobileType.isNotEmpty ? customer.mobileType : 'N/A'),
-                        _buildScreenshotInfoRow('Mobile Model', customer.mobileModel != null && customer.mobileModel!.isNotEmpty ? customer.mobileModel! : 'N/A'),
-                        _buildScreenshotInfoRow('Serial No', customer.serialNo.isNotEmpty ? customer.serialNo : 'N/A'),
-                        _buildScreenshotInfoRow('IMEI 1', customer.imei1.isNotEmpty ? customer.imei1 : 'N/A'),
-                        if (customer.imei2 != null && customer.imei2!.isNotEmpty)
+                        _buildScreenshotInfoRow(
+                          'Mobile Type',
+                          customer.mobileType.isNotEmpty
+                              ? customer.mobileType
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Mobile Model',
+                          customer.mobileModel != null &&
+                                  customer.mobileModel!.isNotEmpty
+                              ? customer.mobileModel!
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Serial No',
+                          customer.serialNo.isNotEmpty
+                              ? customer.serialNo
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'IMEI 1',
+                          customer.imei1.isNotEmpty ? customer.imei1 : 'N/A',
+                        ),
+                        if (customer.imei2 != null &&
+                            customer.imei2!.isNotEmpty)
                           _buildScreenshotInfoRow('IMEI 2', customer.imei2!),
-                        _buildScreenshotInfoRow('Device Status', customer.deviceStatus.isNotEmpty ? customer.deviceStatus : 'N/A'),
-                        _buildScreenshotInfoRow('Status', customer.status.toUpperCase()),
-                        _buildScreenshotInfoRow('Lock Code', customer.lockCode.isNotEmpty ? customer.lockCode : 'N/A'),
+                        _buildScreenshotInfoRow(
+                          'Device Status',
+                          customer.deviceStatus.isNotEmpty
+                              ? customer.deviceStatus
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Status',
+                          customer.status.toUpperCase(),
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Lock Code',
+                          customer.lockCode.isNotEmpty
+                              ? customer.lockCode
+                              : 'N/A',
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // ===== SIM DETAILS CARD =====
                   _buildScreenshotCard(
                     title: 'SIM Details',
                     icon: Icons.sim_card,
-                    gradientColors: [const Color(0xFFf093fb), const Color(0xFFf5576c)],
+                    gradientColors: [
+                      const Color(0xFFf093fb),
+                      const Color(0xFFf5576c),
+                    ],
                     child: Column(
                       children: [
-                        _buildScreenshotInfoRow('SIM Count', customer.simCount.isNotEmpty ? customer.simCount : 'N/A'),
-                        if (customer.sim1NetworkName != null && customer.sim1NetworkName!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 1 Network', customer.sim1NetworkName!),
-                        if (customer.sim1Number != null && customer.sim1Number!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 1 Number', customer.sim1Number!),
-                        if (customer.sim1CountryIso != null && customer.sim1CountryIso!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 1 Country', customer.sim1CountryIso!),
-                        if (customer.sim2NetworkName != null && customer.sim2NetworkName!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 2 Network', customer.sim2NetworkName!),
-                        if (customer.sim2Number != null && customer.sim2Number!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 2 Number', customer.sim2Number!),
-                        if (customer.sim2CountryIso != null && customer.sim2CountryIso!.isNotEmpty)
-                          _buildScreenshotInfoRow('SIM 2 Country', customer.sim2CountryIso!),
-                        if (customer.networkType != null && customer.networkType!.isNotEmpty)
-                          _buildScreenshotInfoRow('Network Type', customer.networkType!),
+                        _buildScreenshotInfoRow(
+                          'SIM Count',
+                          customer.simCount.isNotEmpty
+                              ? customer.simCount
+                              : 'N/A',
+                        ),
+                        if (customer.sim1NetworkName != null &&
+                            customer.sim1NetworkName!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 1 Network',
+                            customer.sim1NetworkName!,
+                          ),
+                        if (customer.sim1Number != null &&
+                            customer.sim1Number!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 1 Number',
+                            customer.sim1Number!,
+                          ),
+                        if (customer.sim1CountryIso != null &&
+                            customer.sim1CountryIso!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 1 Country',
+                            customer.sim1CountryIso!,
+                          ),
+                        if (customer.sim2NetworkName != null &&
+                            customer.sim2NetworkName!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 2 Network',
+                            customer.sim2NetworkName!,
+                          ),
+                        if (customer.sim2Number != null &&
+                            customer.sim2Number!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 2 Number',
+                            customer.sim2Number!,
+                          ),
+                        if (customer.sim2CountryIso != null &&
+                            customer.sim2CountryIso!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'SIM 2 Country',
+                            customer.sim2CountryIso!,
+                          ),
+                        if (customer.networkType != null &&
+                            customer.networkType!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'Network Type',
+                            customer.networkType!,
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // ===== LOCATION DETAILS CARD =====
                   _buildScreenshotCard(
                     title: 'Location & Activity',
                     icon: Icons.location_on,
-                    gradientColors: [const Color(0xFFFF512F), const Color(0xFFDD2476)],
+                    gradientColors: [
+                      const Color(0xFFFF512F),
+                      const Color(0xFFDD2476),
+                    ],
                     child: Column(
                       children: [
-                        _buildScreenshotInfoRow('Actual Device Status', customer.actualDeviceStatus.isNotEmpty ? customer.actualDeviceStatus : 'N/A'),
-                        _buildScreenshotInfoRow('Last Activity', customer.actualDeviceStatusTime.isNotEmpty ? customer.actualDeviceStatusTime : 'N/A'),
-                        if (customer.latitude != null && customer.latitude!.isNotEmpty)
-                          _buildScreenshotInfoRow('Latitude', customer.latitude!),
-                        if (customer.longitude != null && customer.longitude!.isNotEmpty)
-                          _buildScreenshotInfoRow('Longitude', customer.longitude!),
-                        _buildScreenshotInfoRow('Register Status', customer.registerStatus.isNotEmpty ? customer.registerStatus : 'N/A'),
-                        if (customer.registerTime != null && customer.registerTime!.isNotEmpty)
-                          _buildScreenshotInfoRow('Register Time', customer.registerTime!),
-                        _buildScreenshotInfoRow('Created At', customer.createdAt.toString().substring(0, 16)),
+                        _buildScreenshotInfoRow(
+                          'Actual Device Status',
+                          customer.actualDeviceStatus.isNotEmpty
+                              ? customer.actualDeviceStatus
+                              : 'N/A',
+                        ),
+                        _buildScreenshotInfoRow(
+                          'Last Activity',
+                          customer.actualDeviceStatusTime.isNotEmpty
+                              ? customer.actualDeviceStatusTime
+                              : 'N/A',
+                        ),
+                        if (customer.latitude != null &&
+                            customer.latitude!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'Latitude',
+                            customer.latitude!,
+                          ),
+                        if (customer.longitude != null &&
+                            customer.longitude!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'Longitude',
+                            customer.longitude!,
+                          ),
+                        _buildScreenshotInfoRow(
+                          'Register Status',
+                          customer.registerStatus.isNotEmpty
+                              ? customer.registerStatus
+                              : 'N/A',
+                        ),
+                        if (customer.registerTime != null &&
+                            customer.registerTime!.isNotEmpty)
+                          _buildScreenshotInfoRow(
+                            'Register Time',
+                            customer.registerTime!,
+                          ),
+                        _buildScreenshotInfoRow(
+                          'Created At',
+                          customer.createdAt.toString().substring(0, 16),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // ===== EMI DETAILS CARD =====
                   if (customerEmi != null || emiDetails.isNotEmpty)
                     _buildScreenshotCard(
                       title: 'EMI Summary',
                       icon: Icons.payment,
-                      gradientColors: [const Color(0xFF4776E6), const Color(0xFF8E54E9)],
+                      gradientColors: [
+                        const Color(0xFF4776E6),
+                        const Color(0xFF8E54E9),
+                      ],
                       child: Column(
                         children: [
                           if (customerEmi != null) ...[
-                            _buildScreenshotInfoRow('Total Amount', 'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}'),
-                            _buildScreenshotInfoRow('Advance Amount', 'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}'),
-                            _buildScreenshotInfoRow('Monthly EMI', 'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}'),
-                            _buildScreenshotInfoRow('Total Months', '${customerEmi.totalMonthsParsed}'),
+                            _buildScreenshotInfoRow(
+                              'Total Amount',
+                              'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}',
+                            ),
+                            _buildScreenshotInfoRow(
+                              'Advance Amount',
+                              'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}',
+                            ),
+                            _buildScreenshotInfoRow(
+                              'Monthly EMI',
+                              'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}',
+                            ),
+                            _buildScreenshotInfoRow(
+                              'Total Months',
+                              '${customerEmi.totalMonthsParsed}',
+                            ),
                             if (customerEmi.purchaseDate.isNotEmpty)
-                              _buildScreenshotInfoRow('Purchase Date', customerEmi.purchaseDate),
-                            _buildScreenshotInfoRow('Paid EMIs', '${emiDetails.where((e) => e.isPaidStatus).length}'),
-                            _buildScreenshotInfoRow('Remaining EMIs', '${emiDetails.where((e) => !e.isPaidStatus).length}'),
+                              _buildScreenshotInfoRow(
+                                'Purchase Date',
+                                customerEmi.purchaseDate,
+                              ),
+                            _buildScreenshotInfoRow(
+                              'Paid EMIs',
+                              '${emiDetails.where((e) => e.isPaidStatus).length}',
+                            ),
+                            _buildScreenshotInfoRow(
+                              'Remaining EMIs',
+                              '${emiDetails.where((e) => !e.isPaidStatus).length}',
+                            ),
                           ],
                         ],
                       ),
                     ),
-                  
+
                   // ===== EMI SCHEDULE =====
                   if (emiDetails.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     _buildScreenshotCard(
                       title: 'EMI Schedule (${emiDetails.length} months)',
                       icon: Icons.calendar_month,
-                      gradientColors: [const Color(0xFF11998e), const Color(0xFF38ef7d)],
+                      gradientColors: [
+                        const Color(0xFF11998e),
+                        const Color(0xFF38ef7d),
+                      ],
                       child: Column(
                         children: emiDetails.asMap().entries.map((entry) {
                           final index = entry.key;
@@ -1583,14 +2004,18 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: emi.isPaidStatus ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+                                    color: emi.isPaidStatus
+                                        ? Colors.green.withValues(alpha: 0.1)
+                                        : Colors.orange.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Center(
                                     child: Text(
                                       '${index + 1}',
                                       style: robotoBold(context).copyWith(
-                                        color: emi.isPaidStatus ? Colors.green : Colors.orange,
+                                        color: emi.isPaidStatus
+                                            ? Colors.green
+                                            : Colors.orange,
                                         fontSize: 14,
                                       ),
                                     ),
@@ -1599,7 +2024,8 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         'Due: ${emi.emiDate}',
@@ -1610,15 +2036,22 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                                       ),
                                       Text(
                                         'Rs. ${emi.monthlyAmountParsed.toStringAsFixed(0)}',
-                                        style: robotoBold(context).copyWith(fontSize: 14),
+                                        style: robotoBold(
+                                          context,
+                                        ).copyWith(fontSize: 14),
                                       ),
                                     ],
                                   ),
                                 ),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 4,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: emi.isPaidStatus ? Colors.green : Colors.orange,
+                                    color: emi.isPaidStatus
+                                        ? Colors.green
+                                        : Colors.orange,
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
@@ -1639,7 +2072,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 ],
               ),
             ),
-            
+
             // ========== FOOTER SECTION ==========
             Container(
               width: double.infinity,
@@ -1649,18 +2082,16 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 children: [
                   Text(
                     'Device Guardian Admin',
-                    style: robotoBold(context).copyWith(
-                      color: colorScheme.primary,
-                      fontSize: 14,
-                    ),
+                    style: robotoBold(
+                      context,
+                    ).copyWith(color: colorScheme.primary, fontSize: 14),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     'Generated on: ${DateTime.now().toString().substring(0, 19)}',
-                    style: robotoRegular(context).copyWith(
-                      color: Colors.grey.shade600,
-                      fontSize: 11,
-                    ),
+                    style: robotoRegular(
+                      context,
+                    ).copyWith(color: Colors.grey.shade600, fontSize: 11),
                   ),
                 ],
               ),
@@ -1672,7 +2103,11 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   }
 
   // Build tab for screenshot
-  Widget _buildScreenshotTab(String title, bool isSelected, Color primaryColor) {
+  Widget _buildScreenshotTab(
+    String title,
+    bool isSelected,
+    Color primaryColor,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1736,19 +2171,15 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 const SizedBox(width: 8),
                 Text(
                   title,
-                  style: robotoBold(context).copyWith(
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
+                  style: robotoBold(
+                    context,
+                  ).copyWith(color: Colors.white, fontSize: 14),
                 ),
               ],
             ),
           ),
           // Content
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.all(12), child: child),
         ],
       ),
     );
@@ -1765,22 +2196,75 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
             width: 100,
             child: Text(
               label,
-              style: robotoRegular(context).copyWith(
-                color: Colors.grey.shade600,
-                fontSize: 13,
-              ),
+              style: robotoRegular(
+                context,
+              ).copyWith(color: Colors.grey.shade600, fontSize: 13),
             ),
           ),
           const Text(': ', style: TextStyle(color: Colors.grey)),
           Expanded(
             child: Text(
               value,
+              style: robotoBold(
+                context,
+              ).copyWith(color: Colors.grey.shade800, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Build unlock code row with toggle visibility
+  Widget _buildUnlockCodeRow(String unlockCode) {
+    // Only mask if unlock code exists and is not 'N/A'
+    final shouldMask = unlockCode.isNotEmpty && unlockCode != 'N/A';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              'Unlock Code',
+              style: robotoRegular(
+                context,
+              ).copyWith(color: Colors.grey.shade600, fontSize: 13),
+            ),
+          ),
+          const Text(': ', style: TextStyle(color: Colors.grey)),
+          Expanded(
+            child: Text(
+              shouldMask && !_isUnlockCodeVisible
+                  ? '*' * unlockCode.length
+                  : unlockCode,
               style: robotoBold(context).copyWith(
                 color: Colors.grey.shade800,
                 fontSize: 13,
+                letterSpacing: shouldMask && !_isUnlockCodeVisible ? 1 : 0,
               ),
             ),
           ),
+          if (shouldMask)
+            IconButton(
+              icon: Icon(
+                _isUnlockCodeVisible ? Icons.visibility : Icons.visibility_off,
+                size: 20,
+                color: Colors.grey.shade600,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isUnlockCodeVisible = !_isUnlockCodeVisible;
+                });
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: _isUnlockCodeVisible
+                  ? 'Hide unlock code'
+                  : 'Show unlock code',
+            ),
         ],
       ),
     );
@@ -1791,10 +2275,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Commands Tab',
-          style: robotoBold(context).copyWith(fontSize: 16),
-        ),
+        Text('Commands Tab', style: robotoBold(context).copyWith(fontSize: 16)),
         const SizedBox(height: 8),
         Text(
           'Commands are not captured in screenshot for security reasons.',
@@ -1809,7 +2290,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     final emiModel = provider.customerEmiModel;
     final customerEmi = emiModel?.data?.customerEmi;
     final emiDetails = emiModel?.data?.customerEmiDetails ?? [];
-    
+
     if (customerEmi == null && emiDetails.isEmpty) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1819,10 +2300,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
             style: robotoBold(context).copyWith(fontSize: 16),
           ),
           const SizedBox(height: 8),
-          Text(
-            'No EMI records found.',
-            style: robotoRegular(context),
-          ),
+          Text('No EMI records found.', style: robotoRegular(context)),
         ],
       );
     }
@@ -1830,10 +2308,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'EMI Summary',
-          style: robotoBold(context).copyWith(fontSize: 16),
-        ),
+        Text('EMI Summary', style: robotoBold(context).copyWith(fontSize: 16)),
         const SizedBox(height: 12),
         if (customerEmi != null) ...[
           Container(
@@ -1846,12 +2321,27 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildScreenshotEmiInfoRow('Total Amount', 'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}'),
-                _buildScreenshotEmiInfoRow('Advance Amount', 'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}'),
-                _buildScreenshotEmiInfoRow('Monthly Amount', 'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}'),
-                _buildScreenshotEmiInfoRow('Total Months', '${customerEmi.totalMonthsParsed}'),
+                _buildScreenshotEmiInfoRow(
+                  'Total Amount',
+                  'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}',
+                ),
+                _buildScreenshotEmiInfoRow(
+                  'Advance Amount',
+                  'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}',
+                ),
+                _buildScreenshotEmiInfoRow(
+                  'Monthly Amount',
+                  'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}',
+                ),
+                _buildScreenshotEmiInfoRow(
+                  'Total Months',
+                  '${customerEmi.totalMonthsParsed}',
+                ),
                 if (customerEmi.purchaseDate.isNotEmpty)
-                  _buildScreenshotEmiInfoRow('Purchase Date', customerEmi.purchaseDate),
+                  _buildScreenshotEmiInfoRow(
+                    'Purchase Date',
+                    customerEmi.purchaseDate,
+                  ),
               ],
             ),
           ),
@@ -1880,23 +2370,41 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Month ${index + 1}', style: robotoBold(context).copyWith(fontSize: 13)),
-                      Text('Due: ${emi.emiDate}', style: robotoRegular(context).copyWith(fontSize: 12, color: Colors.grey.shade600)),
+                      Text(
+                        'Month ${index + 1}',
+                        style: robotoBold(context).copyWith(fontSize: 13),
+                      ),
+                      Text(
+                        'Due: ${emi.emiDate}',
+                        style: robotoRegular(
+                          context,
+                        ).copyWith(fontSize: 12, color: Colors.grey.shade600),
+                      ),
                     ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('Rs. ${emi.monthlyAmountParsed.toStringAsFixed(0)}', style: robotoBold(context).copyWith(fontSize: 13)),
+                      Text(
+                        'Rs. ${emi.monthlyAmountParsed.toStringAsFixed(0)}',
+                        style: robotoBold(context).copyWith(fontSize: 13),
+                      ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
-                          color: emi.isPaidStatus ? Colors.green : Colors.orange,
+                          color: emi.isPaidStatus
+                              ? Colors.green
+                              : Colors.orange,
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
                           emi.isPaidStatus ? 'PAID' : 'PENDING',
-                          style: robotoRegular(context).copyWith(color: Colors.white, fontSize: 10),
+                          style: robotoRegular(
+                            context,
+                          ).copyWith(color: Colors.white, fontSize: 10),
                         ),
                       ),
                     ],
@@ -1917,7 +2425,12 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: robotoRegular(context).copyWith(color: Colors.grey.shade600, fontSize: 13)),
+          Text(
+            label,
+            style: robotoRegular(
+              context,
+            ).copyWith(color: Colors.grey.shade600, fontSize: 13),
+          ),
           Text(value, style: robotoBold(context).copyWith(fontSize: 13)),
         ],
       ),
@@ -1927,54 +2440,60 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
   // Capture screenshot and share
   Future<void> _captureAndShareScreenshot(dynamic customer) async {
     if (_isCapturingScreenshot) return;
-    
+
     setState(() {
       _isCapturingScreenshot = true;
     });
-    
+
     try {
       final provider = context.read<CustomerProvider>();
-      
+
       // Show loading indicator
-      showCustomSnackBar(context, 'Capturing long screenshot...', isError: false);
-      
-      // Capture the full content using captureFromLongWidget
-      final Uint8List imageBytes = await _screenshotController.captureFromLongWidget(
-        _buildLongScreenshotContent(customer, provider),
-        delay: const Duration(milliseconds: 100),
-        pixelRatio: MediaQuery.of(context).devicePixelRatio,
-        context: context,
+      showCustomSnackBar(
+        context,
+        'Capturing long screenshot...',
+        isError: false,
       );
-      
+
+      // Capture the full content using captureFromLongWidget
+      final Uint8List imageBytes = await _screenshotController
+          .captureFromLongWidget(
+            _buildLongScreenshotContent(customer, provider),
+            delay: const Duration(milliseconds: 100),
+            pixelRatio: MediaQuery.of(context).devicePixelRatio,
+            context: context,
+          );
+
       // Get temp directory and save the image
       final directory = await getTemporaryDirectory();
-      final customerCode = customer.customerCode.isNotEmpty 
-          ? customer.customerCode.toUpperCase() 
+      final customerCode = customer.customerCode.isNotEmpty
+          ? customer.customerCode.toUpperCase()
           : 'CUST_${customer.id}';
-      final fileName = 'customer_${customerCode}_${DateTime.now().millisecondsSinceEpoch}.png';
+      final fileName =
+          'customer_${customerCode}_${DateTime.now().millisecondsSinceEpoch}.png';
       final imagePath = '${directory.path}/$fileName';
       final imageFile = File(imagePath);
       await imageFile.writeAsBytes(imageBytes);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).hideCurrentSnackBar();
       }
-      
+
       // Share the image with text
-      final String shareText = '''
+      final String shareText =
+          '''
 Customer Details:
 Name: ${customer.customerName}
 Phone: ${customer.customerMobileNo}
 Customer Code: ${customer.customerCode.isNotEmpty ? customer.customerCode.toUpperCase() : 'N/A'}
 IMEI: ${customer.imei1}
 ''';
-      
+
       await Share.shareXFiles(
         [XFile(imagePath)],
         text: shareText,
         subject: 'Customer Details - ${customer.customerName}',
       );
-      
     } catch (e) {
       debugPrint('Error capturing screenshot: $e');
       if (mounted) {
@@ -2007,9 +2526,9 @@ IMEI: ${customer.imei1}
             const SizedBox(height: 16),
             Text(
               'No customer data available',
-              style: robotoRegular(context).copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
+              style: robotoRegular(
+                context,
+              ).copyWith(color: colorScheme.onSurface.withValues(alpha: 0.7)),
             ),
           ],
         ),
@@ -2035,7 +2554,10 @@ IMEI: ${customer.imei1}
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [const Color(0xFF667eea).withValues(alpha: 0.1), const Color(0xFF764ba2).withValues(alpha: 0.05)],
+                      colors: [
+                        const Color(0xFF667eea).withValues(alpha: 0.1),
+                        const Color(0xFF764ba2).withValues(alpha: 0.05),
+                      ],
                     ),
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -2043,9 +2565,13 @@ IMEI: ${customer.imei1}
                     children: [
                       CircleAvatar(
                         radius: 28,
-                        backgroundColor: const Color(0xFF667eea).withValues(alpha: 0.2),
+                        backgroundColor: const Color(
+                          0xFF667eea,
+                        ).withValues(alpha: 0.2),
                         child: Text(
-                          customer.customerName.isNotEmpty ? customer.customerName[0].toUpperCase() : 'C',
+                          customer.customerName.isNotEmpty
+                              ? customer.customerName[0].toUpperCase()
+                              : 'C',
                           style: robotoBold(context).copyWith(
                             fontSize: 22,
                             color: const Color(0xFF667eea),
@@ -2069,11 +2595,13 @@ IMEI: ${customer.imei1}
                                 ),
                                 Expanded(
                                   child: Text(
-                                    customer.customerCode.isNotEmpty 
-                                        ? customer.customerCode.toUpperCase() 
+                                    customer.customerCode.isNotEmpty
+                                        ? customer.customerCode.toUpperCase()
                                         : 'N/A',
                                     style: robotoBold(context).copyWith(
-                                      fontSize: Dimensions.fontSizeDefault(context),
+                                      fontSize: Dimensions.fontSizeDefault(
+                                        context,
+                                      ),
                                       color: Colors.grey.shade800,
                                     ),
                                     maxLines: 1,
@@ -2096,7 +2624,11 @@ IMEI: ${customer.imei1}
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(Icons.phone, size: 14, color: Colors.grey.shade600),
+                                Icon(
+                                  Icons.phone,
+                                  size: 14,
+                                  color: Colors.grey.shade600,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   customer.customerMobileNo,
@@ -2114,10 +2646,29 @@ IMEI: ${customer.imei1}
                   ),
                 ),
                 const SizedBox(height: 12),
+
+                // Unlock Code with toggle visibility - full width
+                _buildUnlockCodeInfoItem(
+                  context,
+                  customer.unlockCode != null && customer.unlockCode!.isNotEmpty
+                      ? customer.unlockCode!
+                      : 'N/A',
+                  const Color(0xFF667eea),
+                ),
+                const SizedBox(height: 10),
+
                 // Grid of info items
                 _buildInfoGrid(context, [
-                  _InfoGridItem(Icons.email_outlined, 'Email', customer.email.isNotEmpty ? customer.email : 'N/A'),
-                  _InfoGridItem(Icons.badge_outlined, 'CNIC', customer.cnic.isNotEmpty ? customer.cnic : 'N/A'),
+                  _InfoGridItem(
+                    Icons.email_outlined,
+                    'Email',
+                    customer.email.isNotEmpty ? customer.email : 'N/A',
+                  ),
+                  _InfoGridItem(
+                    Icons.badge_outlined,
+                    'CNIC',
+                    customer.cnic.isNotEmpty ? customer.cnic : 'N/A',
+                  ),
                 ]),
                 const SizedBox(height: 10),
                 // Address - full width
@@ -2131,8 +2682,16 @@ IMEI: ${customer.imei1}
                 const SizedBox(height: 10),
                 // Location info: State, City - using names from provider
                 _buildInfoGrid(context, [
-                  _InfoGridItem(Icons.location_city_outlined, 'State', provider.getStateNameById(customer.state)),
-                  _InfoGridItem(Icons.apartment_outlined, 'City', provider.getCityNameById(customer.city)),
+                  _InfoGridItem(
+                    Icons.location_city_outlined,
+                    'State',
+                    provider.getStateNameById(customer.state),
+                  ),
+                  _InfoGridItem(
+                    Icons.apartment_outlined,
+                    'City',
+                    provider.getCityNameById(customer.city),
+                  ),
                 ]),
                 const SizedBox(height: 10),
                 // Country - full width - using name from provider
@@ -2147,7 +2706,7 @@ IMEI: ${customer.imei1}
             ),
           ),
           const SizedBox(height: 12),
-          
+
           // Device Information Section
           _buildModernCard(
             context: context,
@@ -2158,12 +2717,24 @@ IMEI: ${customer.imei1}
               children: [
                 _buildInfoGrid(context, [
                   _InfoGridItem(
-                    customer.mobileType.toLowerCase() == 'android' ? Icons.android : 
-                    customer.mobileType.toLowerCase() == 'iphone' ? Icons.apple : Icons.phone_android, 
-                    'Mobile Type', 
-                    customer.mobileType.isNotEmpty ? customer.mobileType : 'N/A'
+                    customer.mobileType.toLowerCase() == 'android'
+                        ? Icons.android
+                        : customer.mobileType.toLowerCase() == 'iphone'
+                        ? Icons.apple
+                        : Icons.phone_android,
+                    'Mobile Type',
+                    customer.mobileType.isNotEmpty
+                        ? customer.mobileType
+                        : 'N/A',
                   ),
-                  _InfoGridItem(Icons.phone_android, 'Mobile Model', customer.mobileModel != null && customer.mobileModel!.isNotEmpty ? customer.mobileModel! : 'N/A'),
+                  _InfoGridItem(
+                    Icons.phone_android,
+                    'Mobile Model',
+                    customer.mobileModel != null &&
+                            customer.mobileModel!.isNotEmpty
+                        ? customer.mobileModel!
+                        : 'N/A',
+                  ),
                 ], accentColor: const Color(0xFF11998e)),
                 const SizedBox(height: 10),
                 _buildFullWidthInfoItem(
@@ -2195,7 +2766,7 @@ IMEI: ${customer.imei1}
             ),
           ),
           const SizedBox(height: 12),
-          
+
           // SIM Details Section
           _buildSimDetailsCard(context, provider),
         ],
@@ -2261,17 +2832,18 @@ IMEI: ${customer.imei1}
             ),
           ),
           // Content
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.all(14), child: child),
         ],
       ),
     );
   }
 
   // Info Grid - 2 columns using Row with Expanded for equal width
-  Widget _buildInfoGrid(BuildContext context, List<_InfoGridItem> items, {Color accentColor = const Color(0xFF667eea)}) {
+  Widget _buildInfoGrid(
+    BuildContext context,
+    List<_InfoGridItem> items, {
+    Color accentColor = const Color(0xFF667eea),
+  }) {
     List<Widget> rows = [];
     for (int i = 0; i < items.length; i += 2) {
       rows.add(
@@ -2280,7 +2852,9 @@ IMEI: ${customer.imei1}
             Expanded(child: _buildGridInfoItem(context, items[i], accentColor)),
             const SizedBox(width: 10),
             if (i + 1 < items.length)
-              Expanded(child: _buildGridInfoItem(context, items[i + 1], accentColor))
+              Expanded(
+                child: _buildGridInfoItem(context, items[i + 1], accentColor),
+              )
             else
               const Expanded(child: SizedBox()),
           ],
@@ -2293,7 +2867,11 @@ IMEI: ${customer.imei1}
     return Column(children: rows);
   }
 
-  Widget _buildGridInfoItem(BuildContext context, _InfoGridItem item, Color accentColor) {
+  Widget _buildGridInfoItem(
+    BuildContext context,
+    _InfoGridItem item,
+    Color accentColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -2336,7 +2914,13 @@ IMEI: ${customer.imei1}
   }
 
   // Full width info item
-  Widget _buildFullWidthInfoItem(BuildContext context, IconData icon, String label, String value, Color accentColor) {
+  Widget _buildFullWidthInfoItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+    Color accentColor,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -2383,10 +2967,86 @@ IMEI: ${customer.imei1}
     );
   }
 
+  // Unlock Code Info Item with toggle visibility
+  Widget _buildUnlockCodeInfoItem(
+    BuildContext context,
+    String unlockCode,
+    Color accentColor,
+  ) {
+    // Only mask if unlock code exists and is not 'N/A'
+    final shouldMask = unlockCode.isNotEmpty && unlockCode != 'N/A';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accentColor.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.lock_outline, size: 18, color: accentColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Unlock Code',
+                  style: robotoMedium(context).copyWith(
+                    fontSize: 11,
+                    color: accentColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  shouldMask && !_isUnlockCodeVisible
+                      ? '*' * unlockCode.length
+                      : unlockCode,
+                  style: robotoMedium(context).copyWith(
+                    fontSize: Dimensions.fontSizeSmall(context),
+                    color: Colors.grey.shade800,
+                    letterSpacing: shouldMask && !_isUnlockCodeVisible ? 1 : 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (shouldMask)
+            IconButton(
+              icon: Icon(
+                _isUnlockCodeVisible ? Icons.visibility : Icons.visibility_off,
+                size: 20,
+                color: accentColor,
+              ),
+              onPressed: () {
+                setState(() {
+                  _isUnlockCodeVisible = !_isUnlockCodeVisible;
+                });
+              },
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(),
+              tooltip: _isUnlockCodeVisible
+                  ? 'Hide unlock code'
+                  : 'Show unlock code',
+            ),
+        ],
+      ),
+    );
+  }
+
   // SIM Details Card
   Widget _buildSimDetailsCard(BuildContext context, CustomerProvider provider) {
     const gradientColors = [Color(0xFF4776E6), Color(0xFF8E54E9)];
-    
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -2423,7 +3083,11 @@ IMEI: ${customer.imei1}
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.sim_card, size: 20, color: Colors.white),
+                  child: const Icon(
+                    Icons.sim_card,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2437,8 +3101,8 @@ IMEI: ${customer.imei1}
                 ),
                 // Refresh button
                 InkWell(
-                  onTap: provider.isSimDetailsLoading 
-                      ? null 
+                  onTap: provider.isSimDetailsLoading
+                      ? null
                       : () => provider.fetchSimDetails(widget.customerId),
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
@@ -2450,7 +3114,9 @@ IMEI: ${customer.imei1}
                     child: Icon(
                       Icons.refresh,
                       size: 18,
-                      color: provider.isSimDetailsLoading ? Colors.white60 : Colors.white,
+                      color: provider.isSimDetailsLoading
+                          ? Colors.white60
+                          : Colors.white,
                     ),
                   ),
                 ),
@@ -2470,7 +3136,7 @@ IMEI: ${customer.imei1}
   // SIM Card Content
   Widget _buildSimCardContent(BuildContext context, CustomerProvider provider) {
     const accentColor = Color(0xFF4776E6);
-    
+
     if (provider.isSimDetailsLoading) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 30),
@@ -2496,7 +3162,7 @@ IMEI: ${customer.imei1}
         ),
       );
     }
-    
+
     if (provider.simDetailsError != null) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -2507,7 +3173,11 @@ IMEI: ${customer.imei1}
         ),
         child: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 24),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.orange.shade700,
+              size: 24,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -2522,13 +3192,17 @@ IMEI: ${customer.imei1}
         ),
       );
     }
-    
+
     if (provider.simDetailsData == null || provider.simDetailsData!.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 24),
         child: Column(
           children: [
-            Icon(Icons.sim_card_outlined, size: 40, color: Colors.grey.shade300),
+            Icon(
+              Icons.sim_card_outlined,
+              size: 40,
+              color: Colors.grey.shade300,
+            ),
             const SizedBox(height: 10),
             Text(
               'No SIM details available',
@@ -2541,7 +3215,7 @@ IMEI: ${customer.imei1}
         ),
       );
     }
-    
+
     // Display SIM data in grid - only show specific fields
     final allowedFields = [
       'sim_count',
@@ -2557,24 +3231,31 @@ IMEI: ${customer.imei1}
         .where((e) => allowedFields.contains(e.key))
         .toList();
 
-    final gridItems = simEntries.map((e) => _InfoGridItem(
-      _getSimDetailIcon(e.key),
-      _formatSimDetailKey(e.key),
-      e.value?.toString() ?? 'N/A',
-    )).toList();
-    
+    final gridItems = simEntries
+        .map(
+          (e) => _InfoGridItem(
+            _getSimDetailIcon(e.key),
+            _formatSimDetailKey(e.key),
+            e.value?.toString() ?? 'N/A',
+          ),
+        )
+        .toList();
+
     return _buildInfoGrid(context, gridItems, accentColor: accentColor);
   }
 
   // SIM Details Card for Commands Tab with close button
-  Widget _buildSimDetailsCardForCommandsTab(BuildContext context, CustomerProvider provider) {
+  Widget _buildSimDetailsCardForCommandsTab(
+    BuildContext context,
+    CustomerProvider provider,
+  ) {
     // Only show if the flag is set
     if (!_showSimDetailsCardInCommands) {
       return const SizedBox.shrink();
     }
-    
+
     const gradientColors = [Color(0xFF4776E6), Color(0xFF8E54E9)];
-    
+
     return Container(
       margin: const EdgeInsets.only(top: Dimensions.paddingSizeDefault),
       decoration: BoxDecoration(
@@ -2612,7 +3293,11 @@ IMEI: ${customer.imei1}
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.sim_card, size: 20, color: Colors.white),
+                  child: const Icon(
+                    Icons.sim_card,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -2626,8 +3311,8 @@ IMEI: ${customer.imei1}
                 ),
                 // Refresh button
                 InkWell(
-                  onTap: provider.isSimDetailsLoading 
-                      ? null 
+                  onTap: provider.isSimDetailsLoading
+                      ? null
                       : () => provider.fetchSimDetails(widget.customerId),
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
@@ -2639,7 +3324,9 @@ IMEI: ${customer.imei1}
                     child: Icon(
                       Icons.refresh,
                       size: 18,
-                      color: provider.isSimDetailsLoading ? Colors.white60 : Colors.white,
+                      color: provider.isSimDetailsLoading
+                          ? Colors.white60
+                          : Colors.white,
                     ),
                   ),
                 ),
@@ -2733,7 +3420,12 @@ IMEI: ${customer.imei1}
     );
   }
 
-  Widget _buildInfoItem(BuildContext context, String label, String value, {bool isLast = false}) {
+  Widget _buildInfoItem(
+    BuildContext context,
+    String label,
+    String value, {
+    bool isLast = false,
+  }) {
     return Container(
       margin: EdgeInsets.only(bottom: isLast ? 0 : 6),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2775,7 +3467,7 @@ IMEI: ${customer.imei1}
   Widget _buildCommandsTab(BuildContext context, CustomerProvider provider) {
     final customer = provider.singleCustomer;
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     // If customer isActive is 2, show only re-activate button
     if (customer != null && customer.isActive == 2) {
       return Center(
@@ -2832,7 +3524,9 @@ IMEI: ${customer.imei1}
                         )
                       : const Icon(Icons.refresh, size: 24),
                   label: Text(
-                    provider.isReactivatingCustomer ? 'Re-activating...' : 'Re-activate',
+                    provider.isReactivatingCustomer
+                        ? 'Re-activating...'
+                        : 'Re-activate',
                     style: robotoBold(context).copyWith(
                       fontSize: Dimensions.fontSizeLarge(context),
                       color: Colors.white,
@@ -2853,7 +3547,7 @@ IMEI: ${customer.imei1}
         ),
       );
     }
-    
+
     // Build your commands tab content here
     return SingleChildScrollView(
       padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
@@ -3010,7 +3704,6 @@ IMEI: ${customer.imei1}
             ],
           ),
 
-
           // const SizedBox(height: Dimensions.paddingSizeSmall),
           // Row(
           //   children: [
@@ -3041,7 +3734,6 @@ IMEI: ${customer.imei1}
           //     ),
           //   ],
           // ),
-
           const SizedBox(height: Dimensions.paddingSizeLarge),
 
           // SIM Detail Button with custom handler
@@ -3126,7 +3818,11 @@ IMEI: ${customer.imei1}
           const SizedBox(height: Dimensions.paddingSizeLarge),
 
           // Factory Reset Control Section
-          _buildSectionTitle(context, 'Factory Reset Control', 'فیکٹری ری سیٹ کنٹرول'),
+          _buildSectionTitle(
+            context,
+            'Factory Reset Control',
+            'فیکٹری ری سیٹ کنٹرول',
+          ),
           const SizedBox(height: Dimensions.paddingSizeExtraSmall),
           Row(
             children: [
@@ -3169,12 +3865,12 @@ IMEI: ${customer.imei1}
 
   Widget _buildEmiDetailsTab(BuildContext context, CustomerProvider provider) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     // Get EMI data from provider
     final emiModel = provider.customerEmiModel;
     final customerEmi = emiModel?.data?.customerEmi;
     final emiDetails = emiModel?.data?.customerEmiDetails ?? [];
-    
+
     // Calculate EMI statistics
     final totalAmount = customerEmi?.totalAmountParsed ?? 0;
     final advanceAmount = customerEmi?.advanceAmountParsed ?? 0;
@@ -3182,31 +3878,25 @@ IMEI: ${customer.imei1}
     final totalMonths = customerEmi?.totalMonthsParsed ?? 0;
     final paidEmis = emiDetails.where((e) => e.isPaidStatus).length;
     final remainingEmis = emiDetails.where((e) => !e.isPaidStatus).length;
-    
+    final hasEmiRecord = customerEmi != null || emiDetails.isNotEmpty;
+    final canDeleteEmi = hasEmiRecord && paidEmis == 0;
+
     // Check if loading
     if (provider.isEmiLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
+      return const Center(child: CircularProgressIndicator());
     }
-    
+
     // Check for errors
     if (provider.emiError != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: colorScheme.error,
-            ),
+            Icon(Icons.error_outline, size: 48, color: colorScheme.error),
             const SizedBox(height: 16),
             Text(
               provider.emiError!,
-              style: robotoRegular(context).copyWith(
-                color: colorScheme.error,
-              ),
+              style: robotoRegular(context).copyWith(color: colorScheme.error),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
@@ -3240,7 +3930,9 @@ IMEI: ${customer.imei1}
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                          borderRadius: BorderRadius.circular(
+                            Dimensions.radiusDefault,
+                          ),
                         ),
                         child: Icon(
                           Icons.account_balance_wallet,
@@ -3264,16 +3956,25 @@ IMEI: ${customer.imei1}
                               'قسط کی تفصیلات',
                               style: robotoRegular(context).copyWith(
                                 fontSize: Dimensions.fontSizeSmall(context),
-                                color: colorScheme.onSurface.withValues(alpha: 0.7),
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                      // Show Delete button if EMI details exist, otherwise show Add button
-                      if (emiDetails.isNotEmpty) ...[
+                      // Add only when there is no EMI. Delete only before any payment.
+                      if (canDeleteEmi) ...[
                         IconButton(
-                          onPressed: () => _showDeleteEmiDialog(context),
+                          onPressed: () => _showDeleteEmiDialog(
+                            context,
+                            emiId:
+                                customerEmi?.emiId ??
+                                (emiDetails.isNotEmpty
+                                    ? emiDetails.first.emiId
+                                    : ''),
+                          ),
                           icon: const Icon(Icons.delete, color: Colors.red),
                           tooltip: 'Delete EMI',
                           style: IconButton.styleFrom(
@@ -3283,7 +3984,7 @@ IMEI: ${customer.imei1}
                             ),
                           ),
                         ),
-                      ] else ...[
+                      ] else if (!hasEmiRecord) ...[
                         ElevatedButton.icon(
                           onPressed: () => _showUpdateEmiDetailsDialog(context),
                           icon: const Icon(Icons.add, size: 18),
@@ -3291,7 +3992,10 @@ IMEI: ${customer.imei1}
                           style: ElevatedButton.styleFrom(
                             backgroundColor: colorScheme.primary,
                             foregroundColor: colorScheme.onPrimary,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -3349,7 +4053,8 @@ IMEI: ${customer.imei1}
                     value: '$remainingEmis',
                     colorScheme: colorScheme,
                   ),
-                  if (customerEmi?.purchaseDate != null && customerEmi!.purchaseDate.isNotEmpty) ...[
+                  if (customerEmi?.purchaseDate != null &&
+                      customerEmi!.purchaseDate.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     _buildEmiInfoRow(
                       context: context,
@@ -3373,19 +4078,24 @@ IMEI: ${customer.imei1}
               borderRadius: BorderRadius.circular(Dimensions.radiusLarge),
             ),
             child: Padding(
-              padding:  EdgeInsets.zero,
+              padding: EdgeInsets.zero,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: Dimensions.paddingSizeLarge, vertical: Dimensions.paddingSizeSmall),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: Dimensions.paddingSizeLarge,
+                      vertical: Dimensions.paddingSizeSmall,
+                    ),
                     child: Row(
                       children: [
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: colorScheme.tertiaryContainer,
-                            borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                            borderRadius: BorderRadius.circular(
+                              Dimensions.radiusDefault,
+                            ),
                           ),
                           child: Icon(
                             Icons.table_chart,
@@ -3409,7 +4119,9 @@ IMEI: ${customer.imei1}
                                 'ادائیگی کی تاریخ',
                                 style: robotoRegular(context).copyWith(
                                   fontSize: Dimensions.fontSizeSmall(context),
-                                  color: colorScheme.onSurface.withValues(alpha: 0.7),
+                                  color: colorScheme.onSurface.withValues(
+                                    alpha: 0.7,
+                                  ),
                                 ),
                               ),
                             ],
@@ -3426,29 +4138,24 @@ IMEI: ${customer.imei1}
                   if (emiDetails.isEmpty)
                     _buildEmptyTableRow(context, colorScheme)
                   else
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                    ListView.separated(
+                      padding: EdgeInsets.zero,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemBuilder: (context, index) {
+                        final emiDetail = emiDetails[index];
+                        return _buildPaymentHistoryCard(
+                          context,
+                          colorScheme,
+                          index,
+                          emiDetail,
+                          provider,
+                        );
+                      },
+                      separatorBuilder: (context, index) => const SizedBox(
+                        height: Dimensions.paddingSizeExtraSmall,
                       ),
-                      child: ListView.separated(
-                        padding: EdgeInsets.zero,
-                        shrinkWrap: false,
-                        physics: const ClampingScrollPhysics(),
-                        itemBuilder: (context, index) {
-                          final emiDetail = emiDetails[index];
-                          return _buildPaymentHistoryCard(
-                            context,
-                            colorScheme,
-                            index,
-                            emiDetail,
-                            provider,
-                          );
-                        },
-                        separatorBuilder: (context, index) => const SizedBox(
-                          height: Dimensions.paddingSizeExtraSmall,
-                        ),
-                        itemCount: emiDetails.length,
-                      ),
+                      itemCount: emiDetails.length,
                     ),
                 ],
               ),
@@ -3458,17 +4165,31 @@ IMEI: ${customer.imei1}
       ),
     );
   }
-  
+
   // Helper method to format date
   String _formatDate(String dateStr) {
     try {
       final date = DateTime.parse(dateStr);
-      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final months = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ];
       return '${date.day} ${months[date.month - 1]} ${date.year}';
     } catch (e) {
       return dateStr;
     }
   }
+
   Widget _buildEmiInfoRow({
     required BuildContext context,
     required String label,
@@ -3509,7 +4230,11 @@ IMEI: ${customer.imei1}
     );
   }
 
-  Widget _buildTableHeaderCell(BuildContext context, String text, String urduText) {
+  Widget _buildTableHeaderCell(
+    BuildContext context,
+    String text,
+    String urduText,
+  ) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -3527,7 +4252,9 @@ IMEI: ${customer.imei1}
               urduText,
               style: robotoRegular(context).copyWith(
                 fontSize: Dimensions.fontSizeExtraSmall(context),
-                color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                color: Theme.of(
+                  context,
+                ).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
               ),
               textAlign: TextAlign.center,
             ),
@@ -3551,9 +4278,9 @@ IMEI: ${customer.imei1}
             const SizedBox(height: 8),
             Text(
               'No EMI records found',
-              style: robotoRegular(context).copyWith(
-                color: colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+              style: robotoRegular(
+                context,
+              ).copyWith(color: colorScheme.onSurface.withValues(alpha: 0.5)),
             ),
             Text(
               'کوئی قسط کا ریکارڈ نہیں ملا',
@@ -3585,9 +4312,9 @@ IMEI: ${customer.imei1}
                 flex: 2,
                 child: Text(
                   'EMI Date',
-                  style: robotoBold(context).copyWith(
-                    fontSize: Dimensions.fontSizeDefault(context),
-                  ),
+                  style: robotoBold(
+                    context,
+                  ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
                   textAlign: TextAlign.start,
                 ),
               ),
@@ -3595,9 +4322,9 @@ IMEI: ${customer.imei1}
                 flex: 2,
                 child: Text(
                   'Pay Date',
-                  style: robotoBold(context).copyWith(
-                    fontSize: Dimensions.fontSizeDefault(context),
-                  ),
+                  style: robotoBold(
+                    context,
+                  ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
                   textAlign: TextAlign.start,
                 ),
               ),
@@ -3605,9 +4332,9 @@ IMEI: ${customer.imei1}
                 flex: 1,
                 child: Text(
                   'Mode',
-                  style: robotoBold(context).copyWith(
-                    fontSize: Dimensions.fontSizeDefault(context),
-                  ),
+                  style: robotoBold(
+                    context,
+                  ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
                   textAlign: TextAlign.start,
                 ),
               ),
@@ -3617,9 +4344,9 @@ IMEI: ${customer.imei1}
                   alignment: Alignment.centerRight,
                   child: Text(
                     'Status',
-                    style: robotoBold(context).copyWith(
-                      fontSize: Dimensions.fontSizeDefault(context),
-                    ),
+                    style: robotoBold(
+                      context,
+                    ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
                     textAlign: TextAlign.start,
                   ),
                 ),
@@ -3640,11 +4367,11 @@ IMEI: ${customer.imei1}
   ) {
     final bool isPaid = emiDetail.isPaidStatus;
     final Color statusColor = isPaid ? Colors.green : Colors.orange;
-    
+
     return Column(
       children: <Widget>[
         Container(
-          padding: const EdgeInsets.all(Dimensions.paddingSizeSmall,),
+          padding: const EdgeInsets.all(Dimensions.paddingSizeSmall),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           ),
@@ -3665,7 +4392,9 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 2,
                 child: Text(
-                  emiDetail.hasValidPaymentDate ? _formatDate(emiDetail.paymentDate) : '-',
+                  emiDetail.hasValidPaymentDate
+                      ? _formatDate(emiDetail.paymentDate)
+                      : '-',
                   style: robotoRegular(context).copyWith(
                     fontSize: Dimensions.fontSizeSmall(context),
                     color: colorScheme.onSurface,
@@ -3676,7 +4405,9 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 1,
                 child: Text(
-                  emiDetail.paymentMethod.isNotEmpty ? emiDetail.paymentMethod : '-',
+                  emiDetail.paymentMethod.isNotEmpty
+                      ? emiDetail.paymentMethod
+                      : '-',
                   style: robotoRegular(context).copyWith(
                     fontSize: Dimensions.fontSizeSmall(context),
                     color: colorScheme.onSurface,
@@ -3696,7 +4427,9 @@ IMEI: ${customer.imei1}
                           ),
                           decoration: BoxDecoration(
                             color: statusColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
+                            borderRadius: BorderRadius.circular(
+                              Dimensions.radiusSmall,
+                            ),
                           ),
                           child: Text(
                             'Paid',
@@ -3710,7 +4443,11 @@ IMEI: ${customer.imei1}
                       : InkWell(
                           onTap: provider.isUpdatingEmiPayment
                               ? null
-                              : () => _showMarkAsPaidDialog(context, emiDetail, provider),
+                              : () => _showMarkAsPaidDialog(
+                                  context,
+                                  emiDetail,
+                                  provider,
+                                ),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 6,
@@ -3718,13 +4455,20 @@ IMEI: ${customer.imei1}
                             ),
                             decoration: BoxDecoration(
                               color: Colors.orange.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                              border: Border.all(color: Colors.orange, width: 1),
+                              borderRadius: BorderRadius.circular(
+                                Dimensions.radiusSmall,
+                              ),
+                              border: Border.all(
+                                color: Colors.orange,
+                                width: 1,
+                              ),
                             ),
                             child: Text(
                               'Unpaid',
                               style: robotoBold(context).copyWith(
-                                fontSize: Dimensions.fontSizeExtraSmall(context),
+                                fontSize: Dimensions.fontSizeExtraSmall(
+                                  context,
+                                ),
                                 color: Colors.orange,
                               ),
                               textAlign: TextAlign.center,
@@ -3736,11 +4480,11 @@ IMEI: ${customer.imei1}
             ],
           ),
         ),
-          const Divider(),
+        const Divider(),
       ],
     );
   }
-  
+
   // Show dialog to mark EMI as paid
   Future<void> _showMarkAsPaidDialog(
     BuildContext context,
@@ -3750,9 +4494,14 @@ IMEI: ${customer.imei1}
     final colorScheme = Theme.of(context).colorScheme;
     String selectedPaymentMethod = 'Cash';
     String selectedPaymentDate = DateTime.now().toString().split(' ')[0];
-    final TextEditingController paymentDateController = TextEditingController(text: selectedPaymentDate);
-    
-    final result = await showDialog<Map<String, String>?>(
+    final TextEditingController paymentDateController = TextEditingController(
+      text: selectedPaymentDate,
+    );
+    final TextEditingController transactionIdController =
+        TextEditingController();
+    File? receiptImage;
+
+    final result = await showDialog<Map<String, dynamic>?>(
       context: context,
       barrierDismissible: true,
       builder: (BuildContext dialogContext) {
@@ -3772,111 +4521,199 @@ IMEI: ${customer.imei1}
                 });
               }
             }
-            
+
+            Future<void> pickReceiptImage() async {
+              final picker = ImagePicker();
+              final pickedImage = await picker.pickImage(
+                source: ImageSource.gallery,
+                imageQuality: 80,
+                maxWidth: 1200,
+                maxHeight: 1200,
+              );
+
+              if (pickedImage != null) {
+                setState(() {
+                  receiptImage = File(pickedImage.path);
+                });
+              }
+            }
+
             return AlertDialog(
               title: Text(
                 'Select Payment Method',
-                style: robotoBold(context).copyWith(
-                  fontSize: Dimensions.fontSizeLarge(context),
-                ),
+                style: robotoBold(
+                  context,
+                ).copyWith(fontSize: Dimensions.fontSizeLarge(context)),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Cash Option
-                  ListTile(
-                    leading: Icon(
-                      Icons.money,
-                      color: selectedPaymentMethod == 'Cash' ? colorScheme.primary : colorScheme.onSurface,
-                    ),
-                    title: Text(
-                      'Cash',
-                      style: robotoRegular(context).copyWith(
-                        fontSize: Dimensions.fontSizeDefault(context),
-                        fontWeight: selectedPaymentMethod == 'Cash' ? FontWeight.bold : FontWeight.normal,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Cash Option
+                    ListTile(
+                      leading: Icon(
+                        Icons.money,
+                        color: selectedPaymentMethod == 'Cash'
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
                       ),
-                    ),
-                    trailing: selectedPaymentMethod == 'Cash'
-                        ? Icon(Icons.check_circle, color: colorScheme.primary)
-                        : null,
-                    onTap: () {
-                      setState(() {
-                        selectedPaymentMethod = 'Cash';
-                      });
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: selectedPaymentMethod == 'Cash' ? colorScheme.primary : Colors.grey.shade300,
-                        width: selectedPaymentMethod == 'Cash' ? 2 : 1,
+                      title: Text(
+                        'Cash',
+                        style: robotoRegular(context).copyWith(
+                          fontSize: Dimensions.fontSizeDefault(context),
+                          fontWeight: selectedPaymentMethod == 'Cash'
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
                       ),
-                    ),
-                    tileColor: selectedPaymentMethod == 'Cash' 
-                        ? colorScheme.primary.withValues(alpha: 0.1) 
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  // Online Option
-                  ListTile(
-                    leading: Icon(
-                      Icons.phone_android,
-                      color: selectedPaymentMethod == 'Online' ? colorScheme.primary : colorScheme.onSurface,
-                    ),
-                    title: Text(
-                      'Online',
-                      style: robotoRegular(context).copyWith(
-                        fontSize: Dimensions.fontSizeDefault(context),
-                        fontWeight: selectedPaymentMethod == 'Online' ? FontWeight.bold : FontWeight.normal,
-                      ),
-                    ),
-                    trailing: selectedPaymentMethod == 'Online'
-                        ? Icon(Icons.check_circle, color: colorScheme.primary)
-                        : null,
-                    onTap: () {
-                      setState(() {
-                        selectedPaymentMethod = 'Online';
-                      });
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(
-                        color: selectedPaymentMethod == 'Online' ? colorScheme.primary : Colors.grey.shade300,
-                        width: selectedPaymentMethod == 'Online' ? 2 : 1,
-                      ),
-                    ),
-                    tileColor: selectedPaymentMethod == 'Online' 
-                        ? colorScheme.primary.withValues(alpha: 0.1) 
-                        : null,
-                  ),
-                  const SizedBox(height: 16),
-                  // Payment Date Field
-                  TextField(
-                    controller: paymentDateController,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                      labelText: 'Payment Date',
-                      hintText: 'Select payment date',
-                      prefixIcon: const Icon(Icons.calendar_today),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.edit_calendar),
-                        onPressed: selectPaymentDate,
-                      ),
-                      border: OutlineInputBorder(
+                      trailing: selectedPaymentMethod == 'Cash'
+                          ? Icon(Icons.check_circle, color: colorScheme.primary)
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          selectedPaymentMethod = 'Cash';
+                        });
+                      },
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: selectedPaymentMethod == 'Cash'
+                              ? colorScheme.primary
+                              : Colors.grey.shade300,
+                          width: selectedPaymentMethod == 'Cash' ? 2 : 1,
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: colorScheme.primary),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      tileColor: selectedPaymentMethod == 'Cash'
+                          ? colorScheme.primary.withValues(alpha: 0.1)
+                          : null,
                     ),
-                    onTap: selectPaymentDate,
-                  ),
-                ],
+                    const SizedBox(height: 12),
+                    // Online Option
+                    ListTile(
+                      leading: Icon(
+                        Icons.phone_android,
+                        color: selectedPaymentMethod == 'Online'
+                            ? colorScheme.primary
+                            : colorScheme.onSurface,
+                      ),
+                      title: Text(
+                        'Online',
+                        style: robotoRegular(context).copyWith(
+                          fontSize: Dimensions.fontSizeDefault(context),
+                          fontWeight: selectedPaymentMethod == 'Online'
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      trailing: selectedPaymentMethod == 'Online'
+                          ? Icon(Icons.check_circle, color: colorScheme.primary)
+                          : null,
+                      onTap: () {
+                        setState(() {
+                          selectedPaymentMethod = 'Online';
+                        });
+                      },
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(
+                          color: selectedPaymentMethod == 'Online'
+                              ? colorScheme.primary
+                              : Colors.grey.shade300,
+                          width: selectedPaymentMethod == 'Online' ? 2 : 1,
+                        ),
+                      ),
+                      tileColor: selectedPaymentMethod == 'Online'
+                          ? colorScheme.primary.withValues(alpha: 0.1)
+                          : null,
+                    ),
+                    if (selectedPaymentMethod == 'Online') ...[
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: transactionIdController,
+                        decoration: InputDecoration(
+                          labelText: 'Transaction ID',
+                          hintText: 'Enter transaction ID',
+                          prefixIcon: const Icon(Icons.receipt_long),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: colorScheme.primary),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: pickReceiptImage,
+                        icon: const Icon(Icons.upload_file),
+                        label: Text(
+                          receiptImage == null
+                              ? 'Upload Receipt Image (Optional)'
+                              : 'Change Receipt Image',
+                        ),
+                      ),
+                      if (receiptImage != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.image, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                receiptImage!.path.split('/').last,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: robotoRegular(context).copyWith(
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                    const SizedBox(height: 16),
+                    // Payment Date Field
+                    TextField(
+                      controller: paymentDateController,
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Payment Date',
+                        hintText: 'Select payment date',
+                        prefixIcon: const Icon(Icons.calendar_today),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.edit_calendar),
+                          onPressed: selectPaymentDate,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: colorScheme.primary),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                      ),
+                      onTap: selectPaymentDate,
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -3884,10 +4721,25 @@ IMEI: ${customer.imei1}
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
-                  onPressed: () => Navigator.of(dialogContext).pop({
-                    'paymentMethod': selectedPaymentMethod,
-                    'paymentDate': selectedPaymentDate,
-                  }),
+                  onPressed: () {
+                    if (selectedPaymentMethod == 'Online') {
+                      if (transactionIdController.text.trim().isEmpty) {
+                        showCustomSnackBar(
+                          context,
+                          'Please enter transaction ID',
+                          isError: true,
+                        );
+                        return;
+                      }
+                    }
+
+                    Navigator.of(dialogContext).pop({
+                      'paymentMethod': selectedPaymentMethod,
+                      'paymentDate': selectedPaymentDate,
+                      'transactionId': transactionIdController.text.trim(),
+                      'receiptImage': receiptImage,
+                    });
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -3900,45 +4752,55 @@ IMEI: ${customer.imei1}
         );
       },
     );
-    
-    if (result != null) {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: CircularProgressIndicator(),
-        ),
+
+    if (result == null || !context.mounted) return;
+
+    // Show loading indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    // Call API to mark EMI detail as paid
+    final updateResult = await provider.updateEmiPaymentStatus(
+      emiDtlId: emiDetail.emiDtlId,
+      paymentMethod: result['paymentMethod'] as String,
+      paymentDate: result['paymentDate'] as String,
+      transactionId: result['transactionId'] as String?,
+      receiptImage: result['receiptImage'] as File?,
+    );
+
+    // Hide loading indicator
+    if (context.mounted) {
+      Navigator.of(context).pop();
+    }
+
+    if (!context.mounted) return;
+
+    if (updateResult['success'] == true) {
+      showCustomSnackBar(
+        context,
+        updateResult['message'] ?? 'Payment status updated successfully',
+        isError: false,
       );
-      
-      // Call API to update customer EMI
-      final updateResult = await provider.updateCustomerEmi(
-        customerId: widget.customerId,
-        emiId: emiDetail.emiId,
-        emiDtlId: emiDetail.emiDtlId,
-        paymentMethod: result['paymentMethod']!,
-        paymentDate: result['paymentDate']!,
+
+      // Refresh EMI data
+      await provider.fetchCustomerEmi(widget.customerId);
+    } else {
+      showCustomSnackBar(
+        context,
+        updateResult['error'] ?? 'Failed to update payment status',
+        isError: true,
       );
-      
-      // Hide loading indicator
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-      
-      if (!mounted) return;
-      
-      if (updateResult['success'] == true) {
-        showCustomSnackBar(context, updateResult['message'] ?? 'Payment status updated successfully', isError: false);
-        
-        // Refresh EMI data
-        await provider.fetchCustomerEmi(widget.customerId);
-      } else {
-        showCustomSnackBar(context, updateResult['error'] ?? 'Failed to update payment status', isError: true);
-      }
     }
   }
 
-  Widget _buildSectionTitle(BuildContext context, String title, String urduTitle) {
+  Widget _buildSectionTitle(
+    BuildContext context,
+    String title,
+    String urduTitle,
+  ) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -3976,16 +4838,20 @@ IMEI: ${customer.imei1}
     return SizedBox(
       height: 100,
       width: MediaQuery.of(context).size.width * 0.45,
-      child:  Card(
+      child: Card(
         child: Column(
           children: <Widget>[
             Expanded(
               child: InkWell(
-                onTap: isLoading ? null : () => _showPinDialog(command, successMessage),
+                onTap: isLoading
+                    ? null
+                    : () => _showPinDialog(command, successMessage),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    borderRadius: BorderRadius.circular(
+                      Dimensions.radiusDefault,
+                    ),
                   ),
                   child: Center(
                     child: isLoading
@@ -4026,7 +4892,7 @@ IMEI: ${customer.imei1}
             ),
           ],
         ),
-      )
+      ),
       // ElevatedButton(
       //   onPressed: isLoading ? null : () => _showPinDialog(command, successMessage),
       //   style: ElevatedButton.styleFrom(
@@ -4088,7 +4954,9 @@ IMEI: ${customer.imei1}
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    borderRadius: BorderRadius.circular(
+                      Dimensions.radiusDefault,
+                    ),
                   ),
                   child: Center(
                     child: Column(
@@ -4144,7 +5012,9 @@ IMEI: ${customer.imei1}
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    borderRadius: BorderRadius.circular(
+                      Dimensions.radiusDefault,
+                    ),
                   ),
                   child: Center(
                     child: Column(
@@ -4197,11 +5067,14 @@ IMEI: ${customer.imei1}
           children: <Widget>[
             Expanded(
               child: InkWell(
-                onTap: () => isHideMode ? _showHideAppsDialog() : _showShowAppsDialog(),
+                onTap: () =>
+                    isHideMode ? _showHideAppsDialog() : _showShowAppsDialog(),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
-                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    borderRadius: BorderRadius.circular(
+                      Dimensions.radiusDefault,
+                    ),
                   ),
                   child: Center(
                     child: Column(
@@ -4238,7 +5111,10 @@ IMEI: ${customer.imei1}
   }
 
   // Custom Uninstall Button with special handling
-  Widget _buildUninstallButton(BuildContext context, CustomerProvider provider) {
+  Widget _buildUninstallButton(
+    BuildContext context,
+    CustomerProvider provider,
+  ) {
     final isLoading = provider.isCommandLoading('uninstall');
 
     return SizedBox(
@@ -4300,26 +5176,34 @@ IMEI: ${customer.imei1}
   // Handle Uninstall command with special behavior
   Future<void> _handleUninstall() async {
     final provider = context.read<CustomerProvider>();
-    
+
     final ok = await provider.sendMobileNotification(
       customerId: widget.customerId,
       status: 'uninstall',
     );
-    
+
     if (!mounted) return;
-    
+
     if (ok) {
       // Refresh the customers list
       await provider.fetchCustomers(context, isRefresh: true);
 
       if (!mounted) return;
-      
-      showCustomSnackBar(context, 'UnInstall request sent successfully', isError: false);
-      
+
+      showCustomSnackBar(
+        context,
+        'UnInstall request sent successfully',
+        isError: false,
+      );
+
       // Go back to customer list screen
       Navigator.of(context).pop();
     } else {
-      showCustomSnackBar(context, 'Failed to send uninstall command', isError: true);
+      showCustomSnackBar(
+        context,
+        'Failed to send uninstall command',
+        isError: true,
+      );
     }
   }
 
@@ -4339,7 +5223,9 @@ IMEI: ${customer.imei1}
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: isLoading ? null : () => _showPinDialog(command, successMessage),
+        onPressed: isLoading
+            ? null
+            : () => _showPinDialog(command, successMessage),
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.white,
@@ -4384,8 +5270,13 @@ IMEI: ${customer.imei1}
   }
 
   // Custom Get Location Button that handles 2-second delay API call
-  Widget _buildGetLocationButton(BuildContext context, CustomerProvider provider) {
-    final isLoading = provider.isCommandLoading('get_current_location') || provider.isLocationLoading;
+  Widget _buildGetLocationButton(
+    BuildContext context,
+    CustomerProvider provider,
+  ) {
+    final isLoading =
+        provider.isCommandLoading('get_current_location') ||
+        provider.isLocationLoading;
 
     return SizedBox(
       width: double.infinity,
@@ -4448,7 +5339,7 @@ IMEI: ${customer.imei1}
   // Location Card to display latitude and longitude
   Widget _buildLocationCard(BuildContext context, CustomerProvider provider) {
     // Only show if we have location data
-    if (provider.currentLatitude == null && provider.currentLongitude == null && provider.locationError == null) {
+    if (!provider.hasLocationResponse && provider.locationError == null) {
       return const SizedBox.shrink();
     }
 
@@ -4478,16 +5369,24 @@ IMEI: ${customer.imei1}
               Row(
                 children: [
                   Icon(
-                    provider.locationError != null ? Icons.error_outline : Icons.location_on,
-                    color: provider.locationError != null ? Colors.red : Colors.teal,
+                    provider.locationError != null
+                        ? Icons.error_outline
+                        : Icons.location_on,
+                    color: provider.locationError != null
+                        ? Colors.red
+                        : Colors.teal,
                     size: 28,
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    provider.locationError != null ? 'Location Error' : 'Device Location',
+                    provider.locationError != null
+                        ? 'Location Error'
+                        : 'Device Location',
                     style: robotoBold(context).copyWith(
                       fontSize: Dimensions.fontSizeLarge(context),
-                      color: provider.locationError != null ? Colors.red.shade700 : Colors.teal.shade700,
+                      color: provider.locationError != null
+                          ? Colors.red.shade700
+                          : Colors.teal.shade700,
                     ),
                   ),
                   const Spacer(),
@@ -4498,7 +5397,9 @@ IMEI: ${customer.imei1}
                     },
                     icon: Icon(
                       Icons.close,
-                      color: provider.locationError != null ? Colors.red.shade700 : Colors.teal.shade700,
+                      color: provider.locationError != null
+                          ? Colors.red.shade700
+                          : Colors.teal.shade700,
                     ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -4524,7 +5425,11 @@ IMEI: ${customer.imei1}
                         color: Colors.teal.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.north, color: Colors.teal, size: 20),
+                      child: const Icon(
+                        Icons.north,
+                        color: Colors.teal,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
@@ -4538,7 +5443,7 @@ IMEI: ${customer.imei1}
                           ),
                         ),
                         Text(
-                          provider.currentLatitude?.toStringAsFixed(6) ?? 'N/A',
+                          provider.currentLatitude?.toStringAsFixed(6) ?? '',
                           style: robotoBold(context).copyWith(
                             fontSize: Dimensions.fontSizeDefault(context),
                             color: Colors.teal.shade800,
@@ -4558,7 +5463,11 @@ IMEI: ${customer.imei1}
                         color: Colors.teal.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.east, color: Colors.teal, size: 20),
+                      child: const Icon(
+                        Icons.east,
+                        color: Colors.teal,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
@@ -4572,7 +5481,7 @@ IMEI: ${customer.imei1}
                           ),
                         ),
                         Text(
-                          provider.currentLongitude?.toStringAsFixed(6) ?? 'N/A',
+                          provider.currentLongitude?.toStringAsFixed(6) ?? '',
                           style: robotoBold(context).copyWith(
                             fontSize: Dimensions.fontSizeDefault(context),
                             color: Colors.teal.shade800,
@@ -4591,8 +5500,13 @@ IMEI: ${customer.imei1}
   }
 
   // Custom Get SIM Details Button that handles 2-second delay API call
-  Widget _buildGetSimDetailsButton(BuildContext context, CustomerProvider provider) {
-    final isLoading = provider.isCommandLoading('get_sim_details') || provider.isSimDetailsLoading;
+  Widget _buildGetSimDetailsButton(
+    BuildContext context,
+    CustomerProvider provider,
+  ) {
+    final isLoading =
+        provider.isCommandLoading('get_sim_details') ||
+        provider.isSimDetailsLoading;
 
     return SizedBox(
       width: double.infinity,
@@ -4652,13 +5566,16 @@ IMEI: ${customer.imei1}
     );
   }
 
-
   // Helper to get appropriate icon for SIM detail field
   IconData _getSimDetailIcon(String key) {
     final lowerKey = key.toLowerCase();
-    if (lowerKey.contains('phone') || lowerKey.contains('number') || lowerKey.contains('mobile')) {
+    if (lowerKey.contains('phone') ||
+        lowerKey.contains('number') ||
+        lowerKey.contains('mobile')) {
       return Icons.phone;
-    } else if (lowerKey.contains('carrier') || lowerKey.contains('operator') || lowerKey.contains('network')) {
+    } else if (lowerKey.contains('carrier') ||
+        lowerKey.contains('operator') ||
+        lowerKey.contains('network')) {
       return Icons.cell_tower;
     } else if (lowerKey.contains('imei')) {
       return Icons.smartphone;
@@ -4679,10 +5596,17 @@ IMEI: ${customer.imei1}
   String _formatSimDetailKey(String key) {
     // Convert snake_case or camelCase to Title Case
     return key
-        .replaceAllMapped(RegExp(r'([a-z])([A-Z])'), (match) => '${match.group(1)} ${match.group(2)}')
+        .replaceAllMapped(
+          RegExp(r'([a-z])([A-Z])'),
+          (match) => '${match.group(1)} ${match.group(2)}',
+        )
         .replaceAll('_', ' ')
         .split(' ')
-        .map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : '')
+        .map(
+          (word) => word.isNotEmpty
+              ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}'
+              : '',
+        )
         .join(' ');
   }
 
@@ -4713,9 +5637,9 @@ IMEI: ${customer.imei1}
                 const SizedBox(height: 12),
                 Text(
                   'Couldn\'t load status',
-                  style: robotoBold(context).copyWith(
-                    fontSize: Dimensions.fontSizeLarge(context),
-                  ),
+                  style: robotoBold(
+                    context,
+                  ).copyWith(fontSize: Dimensions.fontSizeLarge(context)),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -4764,16 +5688,13 @@ class _EmiDetailsDialog extends StatefulWidget {
 
 class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
   final _formKey = GlobalKey<FormState>();
-  
+
   // Controllers
   late final TextEditingController _purchaseDateController;
   late final TextEditingController _totalAmountController;
   late final TextEditingController _advanceAmountController;
   late final TextEditingController _totalMonthsController;
-  late final TextEditingController _monthlyAmountController;
-  late final TextEditingController _remarksController;
-  
-  bool _isAutoLock = false;
+
   bool _isLoading = false;
   bool _isDisposed = false;
 
@@ -4784,9 +5705,7 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     _totalAmountController = TextEditingController();
     _advanceAmountController = TextEditingController();
     _totalMonthsController = TextEditingController();
-    _monthlyAmountController = TextEditingController();
-    _remarksController = TextEditingController();
-    
+
     // Set default purchase date to today
     _purchaseDateController.text = DateTime.now().toString().split(' ')[0];
   }
@@ -4798,8 +5717,6 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     _totalAmountController.dispose();
     _advanceAmountController.dispose();
     _totalMonthsController.dispose();
-    _monthlyAmountController.dispose();
-    _remarksController.dispose();
     super.dispose();
   }
 
@@ -4817,27 +5734,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     }
   }
 
-  void _calculateMonthlyAmount() {
-    if (_isDisposed) return;
-    
-    final totalAmount = double.tryParse(_totalAmountController.text) ?? 0;
-    final advanceAmount = double.tryParse(_advanceAmountController.text) ?? 0;
-    final totalMonths = int.tryParse(_totalMonthsController.text) ?? 0;
-    
-    if (totalMonths > 0) {
-      final remainingAmount = totalAmount - advanceAmount;
-      final monthlyAmount = remainingAmount / totalMonths;
-      if (mounted && !_isDisposed) {
-        setState(() {
-          _monthlyAmountController.text = monthlyAmount.toStringAsFixed(2);
-        });
-      }
-    }
-  }
-
   Future<void> _submitForm() async {
     if (_isDisposed || !mounted) return;
-    
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -4851,9 +5750,6 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
         totalAmount: _totalAmountController.text,
         advanceAmount: _advanceAmountController.text,
         totalMonths: _totalMonthsController.text,
-        monthlyAmount: _monthlyAmountController.text,
-        remarks: _remarksController.text,
-        isAutoLock: _isAutoLock ? 1 : 0,
       );
 
       if (_isDisposed || !mounted) return;
@@ -4861,7 +5757,10 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
       if (result['success'] == true) {
         Navigator.of(context).pop({
           'success': true,
-          'message': result['data']?['message'] ?? 'EMI Details added successfully',
+          'message':
+              result['message'] ??
+              result['data']?['message'] ??
+              'EMI Details added successfully',
         });
       } else {
         Navigator.of(context).pop({
@@ -4871,10 +5770,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
       }
     } catch (e) {
       if (_isDisposed || !mounted) return;
-      Navigator.of(context).pop({
-        'success': false,
-        'error': 'Error: ${e.toString()}',
-      });
+      Navigator.of(
+        context,
+      ).pop({'success': false, 'error': 'Error: ${e.toString()}'});
     }
   }
 
@@ -4888,16 +5786,16 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     return InputDecoration(
       labelText: labelText,
       hintText: hintText,
-      labelStyle: robotoRegular(context).copyWith(
-        fontSize: Dimensions.fontSizeSmall(context),
-      ),
+      labelStyle: robotoRegular(
+        context,
+      ).copyWith(fontSize: Dimensions.fontSizeSmall(context)),
       hintStyle: robotoRegular(context).copyWith(
         fontSize: Dimensions.fontSizeExtraSmall(context),
         color: Theme.of(context).hintColor,
       ),
-      errorStyle: robotoRegular(context).copyWith(
-        fontSize: Dimensions.fontSizeExtraSmall(context),
-      ),
+      errorStyle: robotoRegular(
+        context,
+      ).copyWith(fontSize: Dimensions.fontSizeExtraSmall(context)),
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       border: OutlineInputBorder(
@@ -4920,9 +5818,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final textStyle = robotoRegular(context).copyWith(
-      fontSize: Dimensions.fontSizeSmall(context),
-    );
+    final textStyle = robotoRegular(
+      context,
+    ).copyWith(fontSize: Dimensions.fontSizeSmall(context));
 
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -4934,9 +5832,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
           const SizedBox(width: 6),
           Text(
             'Add EMI Details',
-            style: robotoBold(context).copyWith(
-              fontSize: Dimensions.fontSizeDefault(context),
-            ),
+            style: robotoBold(
+              context,
+            ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
           ),
         ],
       ),
@@ -4961,7 +5859,10 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                       icon: const Icon(Icons.edit_calendar, size: 16),
                       onPressed: _selectDate,
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
                     ),
                   ),
                   validator: (value) {
@@ -4972,7 +5873,7 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                   },
                 ),
                 const SizedBox(height: 10),
-                
+
                 // Total Amount
                 TextFormField(
                   controller: _totalAmountController,
@@ -4983,19 +5884,19 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                     hintText: 'Enter amount',
                     prefixIcon: Icons.attach_money,
                   ),
-                  onChanged: (_) => _calculateMonthlyAmount(),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter total amount';
                     }
-                    if (double.tryParse(value) == null) {
+                    final totalAmount = double.tryParse(value);
+                    if (totalAmount == null || totalAmount <= 0) {
                       return 'Enter valid amount';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 10),
-                
+
                 // Advance Amount
                 TextFormField(
                   controller: _advanceAmountController,
@@ -5006,19 +5907,24 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                     hintText: 'Enter advance',
                     prefixIcon: Icons.payment,
                   ),
-                  onChanged: (_) => _calculateMonthlyAmount(),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter advance amount';
                     }
-                    if (double.tryParse(value) == null) {
+                    final advanceAmount = double.tryParse(value);
+                    if (advanceAmount == null || advanceAmount < 0) {
                       return 'Enter valid amount';
+                    }
+                    final totalAmount =
+                        double.tryParse(_totalAmountController.text) ?? 0;
+                    if (totalAmount > 0 && advanceAmount >= totalAmount) {
+                      return 'Advance must be less than total';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: 10),
-                
+
                 // Total Months
                 TextFormField(
                   controller: _totalMonthsController,
@@ -5029,7 +5935,6 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                     hintText: 'EMI months',
                     prefixIcon: Icons.calendar_month,
                   ),
-                  onChanged: (_) => _calculateMonthlyAmount(),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter total months';
@@ -5039,80 +5944,6 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                     }
                     return null;
                   },
-                ),
-                const SizedBox(height: 10),
-                
-                // Monthly Amount (auto-calculated)
-                TextFormField(
-                  controller: _monthlyAmountController,
-                  keyboardType: TextInputType.number,
-                  style: textStyle,
-                  decoration: _compactInputDecoration(
-                    labelText: 'Monthly EMI',
-                    hintText: 'Auto-calculated',
-                    prefixIcon: Icons.monetization_on,
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Monthly amount required';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 10),
-                
-                // Remarks
-                TextFormField(
-                  controller: _remarksController,
-                  maxLines: 2,
-                  style: textStyle,
-                  decoration: _compactInputDecoration(
-                    labelText: 'Remarks (Optional)',
-                    hintText: 'Enter remarks',
-                    prefixIcon: Icons.note,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                
-                // Auto Lock Switch - Compact
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(Dimensions.radiusSmall),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isAutoLock ? Icons.lock : Icons.lock_open,
-                        color: _isAutoLock ? Colors.red : Colors.grey,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Auto Lock on Missed Payment',
-                          style: robotoRegular(context).copyWith(
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                        ),
-                      ),
-                      Transform.scale(
-                        scale: 0.8,
-                        child: Switch(
-                          value: _isAutoLock,
-                          onChanged: (value) {
-                            if (!_isDisposed && mounted) {
-                              setState(() {
-                                _isAutoLock = value;
-                              });
-                            }
-                          },
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -5129,9 +5960,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
           ),
           child: Text(
             'Cancel',
-            style: robotoMedium(context).copyWith(
-              fontSize: Dimensions.fontSizeSmall(context),
-            ),
+            style: robotoMedium(
+              context,
+            ).copyWith(fontSize: Dimensions.fontSizeSmall(context)),
           ),
         ),
         ElevatedButton(
@@ -5149,9 +5980,9 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                 )
               : Text(
                   'Save EMI',
-                  style: robotoMedium(context).copyWith(
-                    fontSize: Dimensions.fontSizeSmall(context),
-                  ),
+                  style: robotoMedium(
+                    context,
+                  ).copyWith(fontSize: Dimensions.fontSizeSmall(context)),
                 ),
         ),
       ],
@@ -5174,10 +6005,12 @@ class _SocialAppsSelectionDialog extends StatefulWidget {
   });
 
   @override
-  State<_SocialAppsSelectionDialog> createState() => _SocialAppsSelectionDialogState();
+  State<_SocialAppsSelectionDialog> createState() =>
+      _SocialAppsSelectionDialogState();
 }
 
-class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> {
+class _SocialAppsSelectionDialogState
+    extends State<_SocialAppsSelectionDialog> {
   final Set<String> _selectedApps = {};
   bool _selectAll = false;
 
@@ -5209,7 +6042,7 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return AlertDialog(
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -5236,14 +6069,17 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                 color: colorScheme.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: _selectAll 
-                      ? colorScheme.primary 
+                  color: _selectAll
+                      ? colorScheme.primary
                       : colorScheme.outline.withValues(alpha: 0.3),
                   width: _selectAll ? 2 : 1,
                 ),
               ),
               child: CheckboxListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 4,
+                ),
                 title: Row(
                   children: [
                     Container(
@@ -5274,7 +6110,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                             'تمام ایپس منتخب کریں',
                             style: TextStyle(
                               fontSize: 12,
-                              color: colorScheme.onSurface.withValues(alpha: 0.7),
+                              color: colorScheme.onSurface.withValues(
+                                alpha: 0.7,
+                              ),
                             ),
                           ),
                         ],
@@ -5300,8 +6138,12 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                   final isSelected = _selectedApps.contains(app.commandName);
                   // Check if app color is too light (like Snapchat yellow)
                   final isLightColor = app.color.computeLuminance() > 0.5;
-                  final selectionIndicatorColor = isLightColor ? Colors.black87 : app.color;
-                  final borderColor = isLightColor && isSelected ? Colors.amber[700]! : app.color;
+                  final selectionIndicatorColor = isLightColor
+                      ? Colors.black87
+                      : app.color;
+                  final borderColor = isLightColor && isSelected
+                      ? Colors.amber[700]!
+                      : app.color;
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: GestureDetector(
@@ -5311,11 +6153,17 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                         padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? (isLightColor ? Colors.amber.withValues(alpha: 0.2) : app.color.withValues(alpha: 0.15))
-                              : colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                              ? (isLightColor
+                                    ? Colors.amber.withValues(alpha: 0.2)
+                                    : app.color.withValues(alpha: 0.15))
+                              : colorScheme.surfaceContainerHighest.withValues(
+                                  alpha: 0.5,
+                                ),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isSelected ? borderColor : colorScheme.outline.withValues(alpha: 0.2),
+                            color: isSelected
+                                ? borderColor
+                                : colorScheme.outline.withValues(alpha: 0.2),
                             width: isSelected ? 2.5 : 1,
                           ),
                           boxShadow: isSelected
@@ -5352,7 +6200,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                               ),
                               child: Icon(
                                 app.icon,
-                                color: isLightColor ? Colors.black : Colors.white,
+                                color: isLightColor
+                                    ? Colors.black
+                                    : Colors.white,
                                 size: 24,
                               ),
                             ),
@@ -5367,7 +6217,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                                     app.name,
                                     style: TextStyle(
                                       fontSize: 14,
-                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      fontWeight: isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
                                       color: colorScheme.onSurface,
                                     ),
                                     maxLines: 1,
@@ -5402,7 +6254,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                                       'Tap to select',
                                       style: TextStyle(
                                         fontSize: 10,
-                                        color: colorScheme.onSurface.withValues(alpha: 0.5),
+                                        color: colorScheme.onSurface.withValues(
+                                          alpha: 0.5,
+                                        ),
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -5449,7 +6303,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                         }
                       },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: widget.isHideMode ? Colors.grey[700] : Colors.green,
+                  backgroundColor: widget.isHideMode
+                      ? Colors.grey[700]
+                      : Colors.green,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -5460,7 +6316,9 @@ class _SocialAppsSelectionDialogState extends State<_SocialAppsSelectionDialog> 
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      widget.isHideMode ? Icons.visibility_off : Icons.visibility,
+                      widget.isHideMode
+                          ? Icons.visibility_off
+                          : Icons.visibility,
                       color: Colors.white,
                       size: 18,
                     ),

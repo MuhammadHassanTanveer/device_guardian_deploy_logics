@@ -4,7 +4,8 @@
 
 import 'dart:convert';
 
-CustomersModel customersModelFromJson(String str) => CustomersModel.fromJson(json.decode(str));
+CustomersModel customersModelFromJson(String str) =>
+    CustomersModel.fromJson(json.decode(str));
 
 String customersModelToJson(CustomersModel data) => json.encode(data.toJson());
 
@@ -22,11 +23,11 @@ class CustomersModel {
   factory CustomersModel.fromJson(Map<String, dynamic> json) => CustomersModel(
     success: json["success"] ?? false,
     message: json["message"] ?? '',
-    data: json["data"] != null 
+    data: json["data"] != null
         ? List<Datum>.from(json["data"].map((x) => Datum.fromJson(x)))
-        : json["Data"] != null 
-            ? List<Datum>.from(json["Data"].map((x) => Datum.fromJson(x)))
-            : [],
+        : json["Data"] != null
+        ? List<Datum>.from(json["Data"].map((x) => Datum.fromJson(x)))
+        : [],
   );
 
   Map<String, dynamic> toJson() => {
@@ -54,21 +55,25 @@ class PaginatedCustomersModel {
     // Handle the new nested response structure: { success, data: { current_page, data: [...], ... } }
     List<Datum> customerList = [];
     CustomerMeta metaData;
-    
+
     final outerData = json["data"] ?? json["Data"];
-    
+
     if (outerData is Map<String, dynamic>) {
       // New API structure: data contains pagination info and nested data array
       final nestedData = outerData["data"];
       if (nestedData is List) {
-        customerList = List<Datum>.from(nestedData.map((x) => Datum.fromJson(x)));
+        customerList = List<Datum>.from(
+          nestedData.map((x) => Datum.fromJson(x)),
+        );
       }
-      
+
       // Extract meta from the outer data object
       metaData = CustomerMeta(
         currentPage: outerData["current_page"] ?? 1,
         lastPage: outerData["last_page"] ?? 1,
-        perPage: outerData["per_page"] is int ? outerData["per_page"] : int.tryParse(outerData["per_page"]?.toString() ?? '10') ?? 10,
+        perPage: outerData["per_page"] is int
+            ? outerData["per_page"]
+            : int.tryParse(outerData["per_page"]?.toString() ?? '10') ?? 10,
         total: outerData["total"] ?? 0,
         nextPageUrl: outerData["next_page_url"],
         prevPageUrl: outerData["prev_page_url"],
@@ -101,7 +106,7 @@ class PaginatedCustomersModel {
         );
       }
     }
-    
+
     return PaginatedCustomersModel(
       success: json["success"] ?? true,
       message: json["message"] ?? '',
@@ -143,7 +148,9 @@ class CustomerMeta {
   factory CustomerMeta.fromJson(Map<String, dynamic> json) => CustomerMeta(
     currentPage: json["current_page"] ?? 1,
     lastPage: json["last_page"] ?? 1,
-    perPage: json["per_page"] is int ? json["per_page"] : int.tryParse(json["per_page"]?.toString() ?? '10') ?? 10,
+    perPage: json["per_page"] is int
+        ? json["per_page"]
+        : int.tryParse(json["per_page"]?.toString() ?? '10') ?? 10,
     total: json["total"] ?? 0,
     nextPageUrl: json["next_page_url"],
     prevPageUrl: json["prev_page_url"],
@@ -339,7 +346,7 @@ class Datum {
     } else {
       countryId = _parseInt(json["country"]);
     }
-    
+
     // Parse state - can be int, String, or Map with id/name
     int stateId = 0;
     String? stateName;
@@ -354,7 +361,7 @@ class Datum {
     } else {
       stateId = _parseInt(json["state"]);
     }
-    
+
     // Parse city - can be int, String, or Map with id/name
     int cityId = 0;
     String? cityName;
@@ -369,7 +376,7 @@ class Datum {
     } else {
       cityId = _parseInt(json["city"]);
     }
-    
+
     // Parse created_by - can be int or Map with user_name/user_code
     int createdById = 0;
     String? createdByName;
@@ -380,7 +387,7 @@ class Datum {
     } else {
       createdById = _parseInt(json["created_by"]);
     }
-    
+
     // Parse lock_status - can be bool or int
     bool lockStatusValue = false;
     if (json["lock_status"] is bool) {
@@ -388,9 +395,11 @@ class Datum {
     } else if (json["lock_status"] is int) {
       lockStatusValue = json["lock_status"] == 1;
     } else if (json["lock_status"] is String) {
-      lockStatusValue = json["lock_status"].toLowerCase() == 'true' || json["lock_status"] == '1';
+      lockStatusValue =
+          json["lock_status"].toLowerCase() == 'true' ||
+          json["lock_status"] == '1';
     }
-    
+
     // Parse actual_lock_status - can be bool or int
     bool actualLockStatusValue = false;
     if (json["actual_lock_status"] is bool) {
@@ -398,22 +407,27 @@ class Datum {
     } else if (json["actual_lock_status"] is int) {
       actualLockStatusValue = json["actual_lock_status"] == 1;
     } else if (json["actual_lock_status"] is String) {
-      actualLockStatusValue = json["actual_lock_status"].toLowerCase() == 'true' || json["actual_lock_status"] == '1';
+      actualLockStatusValue =
+          json["actual_lock_status"].toLowerCase() == 'true' ||
+          json["actual_lock_status"] == '1';
     }
-    
+
     // Parse mobile_images array
     List<String> mobileImagesList = [];
     if (json["mobile_images"] != null && json["mobile_images"] is List) {
-      mobileImagesList = List<String>.from(json["mobile_images"].map((x) => x.toString()));
+      mobileImagesList = List<String>.from(
+        json["mobile_images"].map((x) => x.toString()),
+      );
     }
-    
+
     return Datum(
       id: json["id"] ?? 0,
       hashId: json["hash_id"],
       customerCode: json["customer_code"] ?? '',
       customerName: json["customer_name"] ?? '',
       // Handle both old field (customer_mobile_no) and new field (contact_number)
-      customerMobileNo: json["contact_number"] ?? json["customer_mobile_no"] ?? '',
+      customerMobileNo:
+          json["contact_number"] ?? json["customer_mobile_no"] ?? '',
       email: json["email"] ?? '',
       // Handle both cnic_number (new API) and cnic (old API)
       cnic: json["cnic_number"] ?? json["cnic"] ?? '',
@@ -431,8 +445,10 @@ class Datum {
       imei2: json["imei_2"],
       deviceStatus: json["device_status"] ?? '',
       status: json["status"] ?? '',
-      lockCode: json["lock_code"] ?? '',
-      unlockCode: json["unlock_code"],
+      lockCode: _parseString(json["lock_code"]),
+      unlockCode: _parseNullableString(
+        json["unlock_code"] ?? json["unlockCode"],
+      ),
       activatedBy: json["activated_by"] ?? '',
       mobilePicture: json["mobile_picture"] ?? '',
       mobileType: json["mobile_type"] ?? '',
@@ -448,8 +464,12 @@ class Datum {
       isDeleted: json["is_deleted"] ?? 0,
       registerStatus: json["register_status"] ?? '',
       registerTime: json["register_time"],
-      createdAt: json["created_at"] != null ? DateTime.parse(json["created_at"]) : DateTime.now(),
-      updatedAt: json["updated_at"] != null ? DateTime.parse(json["updated_at"]) : null,
+      createdAt: json["created_at"] != null
+          ? DateTime.parse(json["created_at"])
+          : DateTime.now(),
+      updatedAt: json["updated_at"] != null
+          ? DateTime.parse(json["updated_at"])
+          : null,
       isActive: _parseIsActive(json["is_active"]),
       lockStatus: lockStatusValue,
       actualLockStatus: actualLockStatusValue,
@@ -487,6 +507,17 @@ class Datum {
       return 0;
     }
     return 0;
+  }
+
+  static String _parseString(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  static String? _parseNullableString(dynamic value) {
+    if (value == null) return null;
+    final parsedValue = value.toString().trim();
+    return parsedValue.isEmpty ? null : parsedValue;
   }
 
   // Helper to parse int from various types (int, String, null, or Map with 'id' key)
@@ -686,7 +717,8 @@ class Datum {
       actualDeviceStatus: actualDeviceStatus ?? this.actualDeviceStatus,
       longitude: longitude ?? this.longitude,
       latitude: latitude ?? this.latitude,
-      actualDeviceStatusTime: actualDeviceStatusTime ?? this.actualDeviceStatusTime,
+      actualDeviceStatusTime:
+          actualDeviceStatusTime ?? this.actualDeviceStatusTime,
       simCount: simCount ?? this.simCount,
       sim1NetworkName: sim1NetworkName ?? this.sim1NetworkName,
       sim1Number: sim1Number ?? this.sim1Number,
@@ -704,4 +736,3 @@ class Datum {
     );
   }
 }
-
