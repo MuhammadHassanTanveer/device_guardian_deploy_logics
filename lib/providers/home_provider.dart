@@ -32,11 +32,28 @@ class HomeProvider with ChangeNotifier {
 
   // Count data getters with fallbacks
   int get total => _parseToInt(_countsData?['total']);
-  int get locked => _parseToInt(_countsData?['lock']);
-  int get unlocked => _parseToInt(_countsData?['unlock']);
+  int get locked => _parseToInt(_countsData?['locked'] ?? _countsData?['lock']);
+  int get unlocked => _parseToInt(_countsData?['unlocked'] ?? _countsData?['unlock']);
   int get inactive => _parseToInt(_countsData?['inactive']);
-  String get crediteiPhone => _countsData?['credite_iphone']?.toString() ?? '0';
-  String get crediteAndroid => _countsData?['credite_android']?.toString() ?? '0';
+  String get crediteiPhone => _countField([
+    'ios_credits',
+    'credite_iphone',
+    'credit_iphone',
+  ]);
+  String get crediteAndroid => _countField([
+    'android_credits',
+    'credite_android',
+    'credit_android',
+  ]);
+
+  String _countField(List<String> keys) {
+    if (_countsData == null) return '0';
+    for (final key in keys) {
+      final value = _countsData![key];
+      if (value != null) return value.toString();
+    }
+    return '0';
+  }
 
   // Helper to parse values to int
   int _parseToInt(dynamic value) {
@@ -233,7 +250,7 @@ class HomeProvider with ChangeNotifier {
   }
 
   /// Fetch key rate from API
-  Future<KeyRateModel?> getKeyRate(int quantity) async {
+  Future<KeyRateModel?> getKeyRate(int quantity, {required String keyType}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
@@ -243,13 +260,17 @@ class HomeProvider with ChangeNotifier {
         return null;
       }
 
-      final response = await http.get(
-        Uri.parse('${AppConstants.baseUrl}/get_key_rate?qty=$quantity'),
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/credit-keys-rates/get-rate'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
           'Authorization': 'Bearer $token',
         },
+        body: jsonEncode({
+          'qty': quantity,
+          'key_type': keyType,
+        }),
       );
 
       debugPrint("Key Rate API Response: ${response.body}");
@@ -259,7 +280,7 @@ class HomeProvider with ChangeNotifier {
 
         if (data['success'] == true || data['status'] == true) {
           final rateData = data['Data'] ?? data['data'] ?? data;
-          return KeyRateModel.fromJson(rateData);
+          return KeyRateModel.fromJson(rateData, keyType: keyType);
         }
       } else if (response.statusCode == 401) {
         await SessionManager.handleSessionExpiry(response.statusCode);
@@ -274,8 +295,7 @@ class HomeProvider with ChangeNotifier {
   /// Submit purchase request API
   Future<Map<String, dynamic>> submitPurchaseRequest({
     required int qty,
-    required double price,
-    required double amount,
+    required String keyType,
     required String transactionId,
     File? paymentProof,
   }) async {
@@ -290,7 +310,7 @@ class HomeProvider with ChangeNotifier {
 
       var request = http.MultipartRequest(
         'POST',
-        Uri.parse('${AppConstants.baseUrl}/purchase_request'),
+        Uri.parse('${AppConstants.baseUrl}/mobile/purchase-requests/create'),
       );
 
       // Add headers
@@ -301,8 +321,7 @@ class HomeProvider with ChangeNotifier {
 
       // Add required fields
       request.fields['qty'] = qty.toString();
-      request.fields['price'] = price.toString();
-      request.fields['amount'] = amount.toString();
+      request.fields['key_type'] = keyType;
       request.fields['transaction_id'] = transactionId;
 
       // Add optional payment proof image
@@ -315,7 +334,9 @@ class HomeProvider with ChangeNotifier {
         );
       }
 
-      debugPrint("Purchase Request - qty: $qty, price: $price, amount: $amount, transaction_id: $transactionId");
+      debugPrint(
+        "Purchase Request - qty: $qty, key_type: $keyType, transaction_id: $transactionId, payment_proof: ${paymentProof != null}",
+      );
 
       final streamedResponse = await request.send();
       final response = await http.Response.fromStream(streamedResponse);

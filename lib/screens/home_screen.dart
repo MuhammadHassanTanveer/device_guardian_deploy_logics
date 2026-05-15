@@ -35,6 +35,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _versionDialogShown = false;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -45,19 +46,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _initHomeData() async {
+  Future<void> _refreshHomeData() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+
     final homeProvider = context.read<HomeProvider>();
     await homeProvider.refreshHomeData();
-    
-    // Precache QR code images for instant display in dialogs
+
     if (mounted) {
       _precacheQrImages(homeProvider);
+      setState(() => _isRefreshing = false);
     }
-    
+  }
+
+  Future<void> _initHomeData() async {
+    await _refreshHomeData();
+
     // Check if version is outdated and show dialog
-    if (mounted && homeProvider.isVersionOutdated && !_versionDialogShown) {
-      _versionDialogShown = true;
-      _showUpdateDialogIfNeeded();
+    if (mounted) {
+      final homeProvider = context.read<HomeProvider>();
+      if (homeProvider.isVersionOutdated && !_versionDialogShown) {
+        _versionDialogShown = true;
+        _showUpdateDialogIfNeeded();
+      }
     }
   }
 
@@ -94,6 +105,73 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _showComingSoonDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: theme.cardColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+        ),
+        child: Padding(
+          padding: EdgeInsets.all(Dimensions.paddingSizeDefault),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.campaign, size: 48, color: colorScheme.primary),
+              const SizedBox(height: Dimensions.paddingSizeDefault),
+              Text(
+                'Coming Soon',
+                style: robotoBold(context).copyWith(
+                  fontSize: Dimensions.fontSizeExtraLarge(context),
+                  color: colorScheme.tertiary,
+                ),
+              ),
+              const SizedBox(height: Dimensions.paddingSizeSmall),
+              Text(
+                'My Advertisements will be available soon.',
+                style: robotoRegular(context).copyWith(
+                  fontSize: Dimensions.fontSizeDefault(context),
+                  color: colorScheme.tertiary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Dimensions.paddingSizeSmall),
+              Text(
+                'جلد دستیاب ہوگا',
+                style: robotoRegular(context).copyWith(
+                  fontSize: Dimensions.fontSizeSmall(context),
+                  color: theme.hintColor,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: Dimensions.paddingSizeLarge),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    ),
+                  ),
+                  child: Text(
+                    'OK',
+                    style: robotoBold(context).copyWith(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -103,6 +181,21 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: false,
+        leading: IconButton(
+          onPressed: _isRefreshing ? null : _refreshHomeData,
+          tooltip: 'Refresh',
+          icon: _isRefreshing
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: colorScheme.tertiary,
+                  ),
+                )
+              : Icon(Icons.refresh, color: colorScheme.tertiary),
+        ),
         actions: [
           IconButton(
             icon: Icon(Icons.logout, color: colorScheme.tertiary),
@@ -479,9 +572,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: EdgeInsets.symmetric(horizontal: Dimensions.paddingSizeSmall),
                   child: InkWell(
-                    onTap: () {
-                      // TODO: Navigate to My Advertisements screen
-                    },
+                    onTap: () => _showComingSoonDialog(context),
                     child: Card(
                       elevation: 2,
                       color: theme.cardColor,
@@ -1264,11 +1355,14 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  static const List<String> _creditKeyTypeOptions = ['Android', 'iOS'];
+
   void _showPurchaseRequestDialog(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final quantityController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    String selectedKeyType = _creditKeyTypeOptions.first;
     bool isLoading = false;
 
     showDialog(
@@ -1314,6 +1408,39 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: Dimensions.paddingSizeDefault),
+                    Text(
+                      "Credit Key Type",
+                      style: robotoRegular(context).copyWith(
+                        fontSize: Dimensions.fontSizeDefault(context),
+                        color: colorScheme.tertiary,
+                      ),
+                    ),
+                    const SizedBox(height: Dimensions.paddingSizeExtraSmall),
+                    DropdownButtonFormField<String>(
+                      value: selectedKeyType,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                        ),
+                        prefixIcon: Icon(Icons.vpn_key, color: colorScheme.primary),
+                      ),
+                      items: _creditKeyTypeOptions.map((type) {
+                        return DropdownMenuItem<String>(
+                          value: type,
+                          child: Text(type),
+                        );
+                      }).toList(),
+                      onChanged: isLoading
+                          ? null
+                          : (value) {
+                              if (value != null) {
+                                setState(() {
+                                  selectedKeyType = value;
+                                });
+                              }
+                            },
+                    ),
+                    const SizedBox(height: Dimensions.paddingSizeDefault),
                     TextFormField(
                       controller: quantityController,
                       keyboardType: TextInputType.number,
@@ -1353,7 +1480,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                   final quantity = int.parse(quantityController.text);
                                   final homeProvider = context.read<HomeProvider>();
-                                  final keyRateModel = await homeProvider.getKeyRate(quantity);
+                                  final keyRateModel = await homeProvider.getKeyRate(
+                                    quantity,
+                                    keyType: selectedKeyType,
+                                  );
 
                                   setState(() {
                                     isLoading = false;
@@ -1485,6 +1615,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           const SizedBox(height: Dimensions.paddingSizeSmall),
+                          _buildCompactSummaryRow(context, "Credit Key Type", keyRateModel.keyType),
                           _buildCompactSummaryRow(context, "Quantity", keyRateModel.quantity.toString()),
                           _buildCompactSummaryRow(context, "Price Per Key", "Rs. ${keyRateModel.pricePerKey.toStringAsFixed(0)}"),
                           _buildCompactSummaryRow(context, "Total Amount", "Rs. ${keyRateModel.totalAmount.toStringAsFixed(0)}", isHighlighted: true),
@@ -1701,8 +1832,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 final homeProvider = context.read<HomeProvider>();
                                 final result = await homeProvider.submitPurchaseRequest(
                                   qty: keyRateModel.quantity,
-                                  price: keyRateModel.pricePerKey,
-                                  amount: keyRateModel.totalAmount,
+                                  keyType: keyRateModel.keyType,
                                   transactionId: transactionIdController.text.trim(),
                                   paymentProof: selectedImage,
                                 );

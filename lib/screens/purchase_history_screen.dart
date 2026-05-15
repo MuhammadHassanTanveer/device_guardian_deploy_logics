@@ -109,6 +109,11 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
 
     if (result) {
       _refreshController.refreshCompleted();
+      if (!provider.hasMorePages) {
+        _refreshController.loadNoData();
+      } else {
+        _refreshController.resetNoData();
+      }
     } else {
       _refreshController.refreshFailed();
     }
@@ -127,6 +132,12 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
       context,
       listen: false,
     );
+
+    if (!provider.hasMorePages) {
+      _refreshController.loadNoData();
+      return;
+    }
+
     final result = await provider.fetchMorePurchaseHistory(context);
 
     if (result) {
@@ -141,6 +152,8 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
       context,
       listen: false,
     );
+    provider.resetPagination();
+    _refreshController.resetNoData();
     await provider.fetchPurchaseHistory(
       context,
       isRefresh: true,
@@ -542,6 +555,7 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
                                 ],
                               )
                             : ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(),
                                 padding: EdgeInsets.symmetric(
                                   horizontal: Dimensions.paddingSizeSmall,
                                 ),
@@ -866,6 +880,10 @@ class PurchaseHistoryCardView extends StatelessWidget {
                       _buildDetailRow(context, "Date", item.formattedDate),
                       const Divider(height: 16),
                       _buildDetailRow(context, "Quantity", item.quantity.toString()),
+                      if (item.keyType.isNotEmpty) ...[
+                        const Divider(height: 16),
+                        _buildDetailRow(context, "Credit Key Type", item.keyType),
+                      ],
                       const Divider(height: 16),
                       _buildDetailRow(context, "Price per Key", "Rs. ${item.pricePerKey.toStringAsFixed(0)}"),
                       const Divider(height: 16),

@@ -24,22 +24,43 @@ class PurchaseHistoryModel {
   });
 
   factory PurchaseHistoryModel.fromJson(Map<String, dynamic> json) {
-    // Handle the data field - can be "data" or "Data"
     List<PurchaseHistoryItem> historyList = [];
-    final dataField = json["data"] ?? json["Data"];
-    
-    if (dataField is List) {
-      historyList = List<PurchaseHistoryItem>.from(
-        dataField.map((x) => PurchaseHistoryItem.fromJson(x))
-      );
-    }
-    
-    // Handle meta field
     PurchaseHistoryMeta metaData;
-    if (json.containsKey("meta") && json["meta"] is Map) {
+
+    final outerData = json["data"] ?? json["Data"];
+
+    if (outerData is Map<String, dynamic>) {
+      // Nested pagination: { data: { current_page, last_page, data: [...] } }
+      final nestedData = outerData["data"];
+      if (nestedData is List) {
+        historyList = List<PurchaseHistoryItem>.from(
+          nestedData.map((x) => PurchaseHistoryItem.fromJson(x)),
+        );
+      }
+
+      metaData = PurchaseHistoryMeta(
+        currentPage: _parseInt(outerData["current_page"], 1),
+        lastPage: _parseInt(outerData["last_page"], 1),
+        perPage: _parseInt(outerData["per_page"], 10),
+        total: _parseInt(outerData["total"], historyList.length),
+        nextPageUrl: outerData["next_page_url"]?.toString(),
+        prevPageUrl: outerData["prev_page_url"]?.toString(),
+      );
+    } else if (outerData is List) {
+      historyList = List<PurchaseHistoryItem>.from(
+        outerData.map((x) => PurchaseHistoryItem.fromJson(x)),
+      );
+      metaData = PurchaseHistoryMeta(
+        currentPage: 1,
+        lastPage: 1,
+        perPage: historyList.length,
+        total: historyList.length,
+        nextPageUrl: null,
+        prevPageUrl: null,
+      );
+    } else if (json.containsKey("meta") && json["meta"] is Map) {
       metaData = PurchaseHistoryMeta.fromJson(json["meta"]);
     } else {
-      // Create default meta if not present
       metaData = PurchaseHistoryMeta(
         currentPage: 1,
         lastPage: 1,
@@ -49,13 +70,21 @@ class PurchaseHistoryModel {
         prevPageUrl: null,
       );
     }
-    
+
     return PurchaseHistoryModel(
-      success: json["success"] ?? true,
-      message: json["message"] ?? '',
+      success: (json["success"] ?? json["status"] ?? true) != false,
+      message: json["message"]?.toString() ?? '',
       data: historyList,
       meta: metaData,
     );
+  }
+
+  static int _parseInt(dynamic value, int fallback) {
+    if (value == null) return fallback;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? fallback;
+    return fallback;
   }
 
   Map<String, dynamic> toJson() => {
@@ -85,12 +114,12 @@ class PurchaseHistoryMeta {
   });
 
   factory PurchaseHistoryMeta.fromJson(Map<String, dynamic> json) => PurchaseHistoryMeta(
-    currentPage: json["current_page"] ?? 1,
-    lastPage: json["last_page"] ?? 1,
-    perPage: json["per_page"] ?? 10,
-    total: json["total"] ?? 0,
-    nextPageUrl: json["next_page_url"],
-    prevPageUrl: json["prev_page_url"],
+    currentPage: PurchaseHistoryModel._parseInt(json["current_page"], 1),
+    lastPage: PurchaseHistoryModel._parseInt(json["last_page"], 1),
+    perPage: PurchaseHistoryModel._parseInt(json["per_page"], 10),
+    total: PurchaseHistoryModel._parseInt(json["total"], 0),
+    nextPageUrl: json["next_page_url"]?.toString(),
+    prevPageUrl: json["prev_page_url"]?.toString(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -109,6 +138,7 @@ class PurchaseHistoryItem {
   final int quantity;
   final double amount;
   final double pricePerKey;
+  final String keyType;
   final String status;
   final String transactionId;
   final String? paymentProof;
@@ -121,6 +151,7 @@ class PurchaseHistoryItem {
     required this.quantity,
     required this.amount,
     required this.pricePerKey,
+    required this.keyType,
     required this.status,
     required this.transactionId,
     this.paymentProof,
@@ -132,8 +163,9 @@ class PurchaseHistoryItem {
   factory PurchaseHistoryItem.fromJson(Map<String, dynamic> json) => PurchaseHistoryItem(
     id: json["id"] ?? 0,
     quantity: _parseInt(json["qty"] ?? json["quantity"]),
-    amount: _parseDouble(json["amount"]),
+    amount: _parseDouble(json["amount"] ?? json["total_amount"]),
     pricePerKey: _parseDouble(json["price"] ?? json["price_per_key"]),
+    keyType: json["key_type"]?.toString() ?? '',
     status: json["approval_status"]?.toString() ?? json["status"]?.toString() ?? 'Pending',
     transactionId: json["transaction_id"]?.toString() ?? '',
     paymentProof: json["payment_proof"]?.toString(),
@@ -153,6 +185,7 @@ class PurchaseHistoryItem {
     "qty": quantity,
     "amount": amount,
     "price": pricePerKey,
+    "key_type": keyType,
     "approval_status": status,
     "transaction_id": transactionId,
     "payment_proof": paymentProof,

@@ -22,9 +22,11 @@ class CustomerCountsModel {
       locked: _parseInt(json['lock'] ?? json['locked']),
       unlocked: _parseInt(json['unlock'] ?? json['unlocked']),
       inactive: _parseInt(json['inactive']),
-      creditIphone: json['credite_iphone']?.toString() ??
+      creditIphone: json['ios_credits']?.toString() ??
+                    json['credite_iphone']?.toString() ??
                     json['credit_iphone']?.toString() ?? '0',
-      creditAndroid: json['credite_android']?.toString() ??
+      creditAndroid: json['android_credits']?.toString() ??
+                     json['credite_android']?.toString() ??
                      json['credit_android']?.toString() ?? '0',
     );
   }

@@ -9,29 +9,25 @@ import '../util/app_constants.dart';
 import '../util/session_manager.dart';
 
 class PurchaseHistoryProvider with ChangeNotifier {
-  // State variables
   PurchaseHistoryModel? purchaseHistoryModel;
   List<PurchaseHistoryItem> purchaseHistoryList = [];
   bool isLoading = false;
   bool isLoadingMore = false;
 
-  // Pagination variables
   int pageIndex = 1;
   int totalPages = 1;
   bool? showMore;
   bool? showingMore;
 
-  // Filter and search state
+  static const int _perPage = 10;
+
   String _currentFilter = 'All';
   String _currentSearch = '';
 
   String get currentFilter => _currentFilter;
   String get currentSearch => _currentSearch;
-
-  // Computed property for pagination
   bool get hasMorePages => pageIndex <= totalPages;
 
-  // Reset pagination state
   void resetPagination() {
     purchaseHistoryList = [];
     pageIndex = 1;
@@ -41,7 +37,6 @@ class PurchaseHistoryProvider with ChangeNotifier {
     isLoadingMore = false;
   }
 
-  // Clear data - called when refreshing
   void clearData() {
     purchaseHistoryModel = null;
     purchaseHistoryList = [];
@@ -52,14 +47,41 @@ class PurchaseHistoryProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Fetch purchase history with pagination support
+  Uri _buildHistoryUrl() {
+    final filterValue = _currentFilter == 'All' ? '' : _currentFilter;
+    final queryParams = <String, String>{
+      'page': pageIndex.toString(),
+      'per_page': _perPage.toString(),
+      if (filterValue.isNotEmpty) 'filter': filterValue,
+      if (_currentSearch.isNotEmpty) 'search': _currentSearch,
+    };
+    return Uri.parse(
+      '${AppConstants.baseUrl}/mobile/purchase-requests/history',
+    ).replace(queryParameters: queryParams);
+  }
+
+  void _applyPaginationResponse(PurchaseHistoryModel model, {required bool isRefresh}) {
+    purchaseHistoryModel = model;
+
+    if (isRefresh) {
+      purchaseHistoryList = model.data;
+    } else {
+      purchaseHistoryList.addAll(model.data);
+    }
+
+    pageIndex++;
+    totalPages = model.meta.lastPage;
+
+    showMore = model.meta.total > purchaseHistoryList.length;
+    showingMore = false;
+  }
+
   Future<bool> fetchPurchaseHistory(
     BuildContext context, {
     bool isRefresh = false,
     String? filter,
     String? search,
   }) async {
-    // Update filter and search if provided
     if (filter != null) {
       _currentFilter = filter;
     }
@@ -69,10 +91,9 @@ class PurchaseHistoryProvider with ChangeNotifier {
 
     if (isRefresh) {
       pageIndex = 1;
-    } else {
-      if (pageIndex > totalPages) {
-        return false;
-      }
+      totalPages = 1;
+    } else if (pageIndex > totalPages) {
+      return false;
     }
 
     if (isRefresh) {
@@ -82,7 +103,6 @@ class PurchaseHistoryProvider with ChangeNotifier {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final userId = prefs.getString('user_id');
       final authToken = prefs.getString('auth_token') ?? '';
 
       if (authToken.isEmpty) {
@@ -90,18 +110,11 @@ class PurchaseHistoryProvider with ChangeNotifier {
         return false;
       }
 
-      debugPrint("=== Fetch Purchase History Debug ===");
-      debugPrint("Retrieved user_id: $userId");
-      debugPrint("Auth token present: ${authToken.isNotEmpty}");
-
-      // Build URL with query parameters
-      String filterValue = _currentFilter == 'All' ? '' : _currentFilter;
-      final url = '${AppConstants.baseUrl}/purchase_request_history?page=$pageIndex&filter=$filterValue&search=$_currentSearch';
-
+      final url = _buildHistoryUrl();
       debugPrint("Purchase History API URL: $url");
 
       final response = await http.get(
-        Uri.parse(url),
+        url,
         headers: <String, String>{
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -111,37 +124,16 @@ class PurchaseHistoryProvider with ChangeNotifier {
 
       if (response.statusCode == 200) {
         debugPrint("Purchase History API success");
-        debugPrint("=== FULL RESPONSE BODY ===");
-        debugPrint(response.body);
-        debugPrint("=== END RESPONSE BODY ===");
 
         try {
           final jsonData = json.decode(response.body);
-          purchaseHistoryModel = PurchaseHistoryModel.fromJson(jsonData);
-
-          // Update pagination state from API response
-          if (isRefresh) {
-            purchaseHistoryList = purchaseHistoryModel!.data;
-          } else {
-            purchaseHistoryList.addAll(purchaseHistoryModel!.data);
-          }
-
-          pageIndex++;
-          totalPages = purchaseHistoryModel!.meta.lastPage;
-
-          // Update showMore flag
-          if (purchaseHistoryModel!.meta.total == purchaseHistoryList.length) {
-            showMore = false;
-          } else {
-            showMore = true;
-          }
-          showingMore = false;
+          final model = PurchaseHistoryModel.fromJson(jsonData);
+          _applyPaginationResponse(model, isRefresh: isRefresh);
 
           debugPrint("=== Pagination State After Fetch ===");
           debugPrint("Items loaded: ${purchaseHistoryList.length}");
-          debugPrint("Current page index: $pageIndex");
+          debugPrint("Next page index: $pageIndex");
           debugPrint("Total pages: $totalPages");
-          debugPrint("Total items: ${purchaseHistoryModel!.meta.total}");
           debugPrint("Has more pages: $hasMorePages");
 
           notifyListeners();
@@ -161,7 +153,7 @@ class PurchaseHistoryProvider with ChangeNotifier {
           meta: PurchaseHistoryMeta(
             currentPage: 1,
             lastPage: 1,
-            perPage: 10,
+            perPage: _perPage,
             total: 0,
           ),
         );
@@ -180,9 +172,21 @@ class PurchaseHistoryProvider with ChangeNotifier {
     }
   }
 
-  // Fetch more items (for pagination - load next page)
   Future<bool> fetchMorePurchaseHistory(BuildContext context) async {
-    if (!hasMorePages || isLoadingMore) {
+    debugPrint("=== fetchMorePurchaseHistory called ===");
+    debugPrint(
+      "isLoadingMore: $isLoadingMore, pageIndex: $pageIndex, totalPages: $totalPages",
+    );
+
+    if (isLoadingMore) {
+      debugPrint("Skipping fetchMorePurchaseHistory - already loading");
+      return false;
+    }
+
+    if (pageIndex > totalPages) {
+      debugPrint(
+        "Skipping fetchMorePurchaseHistory - no more pages (pageIndex $pageIndex > totalPages $totalPages)",
+      );
       return false;
     }
 
@@ -190,31 +194,80 @@ class PurchaseHistoryProvider with ChangeNotifier {
     showingMore = true;
     notifyListeners();
 
-    final result = await fetchPurchaseHistory(
-      context,
-      isRefresh: false,
-      filter: _currentFilter,
-      search: _currentSearch,
-    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final authToken = prefs.getString('auth_token') ?? '';
 
-    isLoadingMore = false;
-    showingMore = false;
-    notifyListeners();
+      if (authToken.isEmpty) {
+        return false;
+      }
 
-    return result;
+      final url = _buildHistoryUrl();
+      debugPrint("Fetching more purchase history - page $pageIndex");
+      debugPrint("URL: $url");
+
+      final response = await http.get(
+        url,
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        try {
+          final jsonData = json.decode(response.body);
+          final model = PurchaseHistoryModel.fromJson(jsonData);
+          _applyPaginationResponse(model, isRefresh: false);
+
+          debugPrint("=== After Load More ===");
+          debugPrint("New items: ${model.data.length}");
+          debugPrint("Total loaded: ${purchaseHistoryList.length}");
+          debugPrint("Next page index: $pageIndex");
+          debugPrint("Has more pages: ${pageIndex <= totalPages}");
+
+          notifyListeners();
+          return model.data.isNotEmpty;
+        } catch (parseError) {
+          debugPrint("Error parsing more purchase history response: $parseError");
+          return false;
+        }
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        purchaseHistoryModel = PurchaseHistoryModel(
+          success: false,
+          message: 'Unauthorized',
+          data: purchaseHistoryList,
+          meta: PurchaseHistoryMeta(
+            currentPage: 1,
+            lastPage: 1,
+            perPage: _perPage,
+            total: purchaseHistoryList.length,
+          ),
+        );
+        return false;
+      } else {
+        debugPrint("Load more failed: ${response.statusCode}");
+        return false;
+      }
+    } catch (e) {
+      debugPrint('Error fetching more purchase history: $e');
+      return false;
+    } finally {
+      isLoadingMore = false;
+      showingMore = false;
+      notifyListeners();
+    }
   }
 
-  // Update filter
   void updateFilter(String filter) {
     _currentFilter = filter;
     notifyListeners();
   }
 
-  // Update search query
   void updateSearch(String search) {
     _currentSearch = search;
     notifyListeners();
   }
 }
-
-
