@@ -652,16 +652,12 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                         CustomTextFieldWidget(
                                           labelText: 'Address پتہ',
                                           controller: addressController,
-                                          required: true,
+                                          required: false,
                                           prefixIcon: Icons.location_on,
                                           hintText: 'Enter customer address کسٹمر کا پتہ درج کریں',
                                           inputType: TextInputType.streetAddress,
                                           capitalization: TextCapitalization.words,
-                                          isRequired: true,
-                                          validator: (value) => ValidateCheck.validatePassword(
-                                            value,
-                                            'Enter customer address کسٹمر کا پتہ درج کریں',
-                                          ),
+                                          isRequired: false,
                                         ),
                                         const SizedBox(height: Dimensions.paddingSizeDefault),
                                         
@@ -1600,7 +1596,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
       debugPrint('Mobile Model: ${mobileModelController.text.trim()}');
       debugPrint('IMEI-1: ${imei1Controller.text.trim()}');
       debugPrint('IMEI-2: ${customerProvider.imeiCount == 2 ? imei2Controller.text.trim() : 'N/A'}');
-      debugPrint('IMEI Type: ${(customerProvider.imeiCount == 2 && imei2Controller.text.trim().isNotEmpty) ? 'dual' : 'single'}');
+      debugPrint('IMEI Type: ${(customerProvider.imeiCount == 2 && imei2Controller.text.trim().isNotEmpty) ? 'double' : 'single'}');
       debugPrint('==========================================');
 
       final result = isEditMode

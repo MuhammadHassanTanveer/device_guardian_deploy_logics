@@ -458,13 +458,13 @@ class CustomerProvider with ChangeNotifier {
         request.fields['state_id'] = stateId.toString();
         request.fields['city_id'] = cityId.toString();
 
-        // Add IMEI type based on whether imei2 is provided
+        // Add IMEI type: single or double (lowercase for API/database)
         request.fields['imei_type'] = (imei2 != null && imei2.isNotEmpty)
-            ? 'dual'
+            ? 'double'
             : 'single';
         request.fields['imei_1'] = imei1 ?? '';
 
-        // Only include imei_2 if it's provided (dual IMEI)
+        // Only include imei_2 if it's provided (double IMEI)
         if (imei2 != null && imei2.isNotEmpty) {
           request.fields['imei_2'] = imei2;
         }
@@ -780,9 +780,9 @@ class CustomerProvider with ChangeNotifier {
         request.fields['state_id'] = stateId.toString();
         request.fields['city_id'] = cityId.toString();
 
-        // Add IMEI type based on whether imei2 is provided
+        // Add IMEI type: single or double (lowercase for API/database)
         request.fields['imei_type'] = (imei2 != null && imei2.isNotEmpty)
-            ? 'dual'
+            ? 'double'
             : 'single';
         request.fields['imei_1'] = imei1 ?? '';
 
