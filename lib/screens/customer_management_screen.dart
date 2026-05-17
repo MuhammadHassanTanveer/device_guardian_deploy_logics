@@ -383,11 +383,19 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     return result == true;
   }
 
-  Future<void> _showPinDialog(String command, String successMessage) async {
+  Future<void> _showPinDialog(
+    String command,
+    String successMessage, {
+    bool refreshCustomerAfterSuccess = false,
+  }) async {
     final verified = await _verifyPinWithDialog(command);
     if (verified) {
       debugPrint('✅ PIN verified, executing command: $command');
-      await _sendCommand(command, successMessage);
+      await _sendCommand(
+        command,
+        successMessage,
+        refreshCustomerAfterSuccess: refreshCustomerAfterSuccess,
+      );
     } else {
       debugPrint(
         '❌ PIN not verified or dialog cancelled, command NOT executed',
@@ -395,18 +403,41 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     }
   }
 
-  Future<void> _sendCommand(String status, String successMessage) async {
-    // Debug: Print the command being sent to console
+  Future<void> _sendCommand(
+    String status,
+    String successMessage, {
+    bool refreshCustomerAfterSuccess = false,
+    String? loadingCommandKey,
+  }) async {
     debugPrint('========================================');
     debugPrint('Sending Command: $status');
     debugPrint('Customer ID: ${widget.customerId}');
     debugPrint('Using API: /mobile/notifications/send');
+    if (refreshCustomerAfterSuccess) {
+      debugPrint('Will refresh: GET /mobile/customers/${widget.customerId}');
+    }
     debugPrint('========================================');
 
-    final ok = await context.read<CustomerProvider>().sendMobileNotification(
-      customerId: widget.customerId,
-      status: status,
-    );
+    final provider = context.read<CustomerProvider>();
+    final loadingKey = loadingCommandKey ?? status;
+    provider.setCommandLoading(loadingKey, true);
+
+    bool ok = false;
+    try {
+      ok = refreshCustomerAfterSuccess
+          ? await provider.sendMobileNotificationAndRefreshCustomer(
+              context: context,
+              customerId: widget.customerId,
+              status: status,
+            )
+          : await provider.sendMobileNotification(
+              customerId: widget.customerId,
+              status: status,
+            );
+    } finally {
+      provider.setCommandLoading(loadingKey, false);
+    }
+
     if (!mounted) return;
     showCustomSnackBar(
       context,
@@ -417,47 +448,50 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
   // Method to handle Get Location with 2-second delay API call
   Future<void> _handleGetLocation() async {
-    // First, send the get_current_location command
-    final ok = await context.read<CustomerProvider>().sendMobileNotification(
-      customerId: widget.customerId,
-      status: 'get_current_location',
-    );
+    final provider = context.read<CustomerProvider>();
+    provider.setCommandLoading('get_current_location', true);
 
-    if (!mounted) return;
-
-    if (ok) {
-      showCustomSnackBar(
-        context,
-        'Location request sent. Fetching location...',
-        isError: false,
+    try {
+      final ok = await provider.sendMobileNotification(
+        customerId: widget.customerId,
+        status: 'get_current_location',
       );
 
-      // Wait for 2 seconds before fetching location
-      await Future.delayed(const Duration(seconds: 2));
-
       if (!mounted) return;
 
-      // Fetch the location from the API
-      final locationFetched = await context
-          .read<CustomerProvider>()
-          .fetchCustomerLocation(widget.customerId);
-
-      if (!mounted) return;
-
-      if (!locationFetched) {
+      if (ok) {
         showCustomSnackBar(
           context,
-          context.read<CustomerProvider>().locationError ??
-              'Failed to fetch location',
+          'Location request sent. Fetching location...',
+          isError: false,
+        );
+
+        await Future.delayed(const Duration(seconds: 2));
+
+        if (!mounted) return;
+
+        final locationFetched = await provider.fetchCustomerLocation(
+          widget.customerId,
+        );
+
+        if (!mounted) return;
+
+        if (!locationFetched) {
+          showCustomSnackBar(
+            context,
+            provider.locationError ?? 'Failed to fetch location',
+            isError: true,
+          );
+        }
+      } else {
+        showCustomSnackBar(
+          context,
+          'Failed to send location command',
           isError: true,
         );
       }
-    } else {
-      showCustomSnackBar(
-        context,
-        'Failed to send location command',
-        isError: true,
-      );
+    } finally {
+      provider.setCommandLoading('get_current_location', false);
     }
   }
 
@@ -471,52 +505,54 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
 
   // Method to handle Get SIM Details with 2-second delay API call
   Future<void> _handleGetSimDetails() async {
-    // First, send the get_sim_details command
-    final ok = await context.read<CustomerProvider>().sendMobileNotification(
-      customerId: widget.customerId,
-      status: 'get_sim_details',
-    );
+    final provider = context.read<CustomerProvider>();
+    provider.setCommandLoading('get_sim_details', true);
 
-    if (!mounted) return;
-
-    if (ok) {
-      showCustomSnackBar(
-        context,
-        'SIM details request sent. Fetching details...',
-        isError: false,
+    try {
+      final ok = await provider.sendMobileNotification(
+        customerId: widget.customerId,
+        status: 'get_sim_details',
       );
 
-      // Wait for 2 seconds before fetching SIM details
-      await Future.delayed(const Duration(seconds: 2));
-
       if (!mounted) return;
 
-      // Fetch the SIM details from the API
-      final simDetailsFetched = await context
-          .read<CustomerProvider>()
-          .fetchSimDetails(widget.customerId);
+      if (ok) {
+        showCustomSnackBar(
+          context,
+          'SIM details request sent. Fetching details...',
+          isError: false,
+        );
 
-      if (!mounted) return;
+        await Future.delayed(const Duration(seconds: 2));
 
-      if (simDetailsFetched) {
-        // Show the SIM details card in Commands tab
-        setState(() {
-          _showSimDetailsCardInCommands = true;
-        });
+        if (!mounted) return;
+
+        final simDetailsFetched = await provider.fetchSimDetails(
+          widget.customerId,
+        );
+
+        if (!mounted) return;
+
+        if (simDetailsFetched) {
+          setState(() {
+            _showSimDetailsCardInCommands = true;
+          });
+        } else {
+          showCustomSnackBar(
+            context,
+            provider.simDetailsError ?? 'Failed to fetch SIM details',
+            isError: true,
+          );
+        }
       } else {
         showCustomSnackBar(
           context,
-          context.read<CustomerProvider>().simDetailsError ??
-              'Failed to fetch SIM details',
+          'Failed to send SIM details command',
           isError: true,
         );
       }
-    } else {
-      showCustomSnackBar(
-        context,
-        'Failed to send SIM details command',
-        isError: true,
-      );
+    } finally {
+      provider.setCommandLoading('get_sim_details', false);
     }
   }
 
@@ -890,10 +926,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
 
     if (newPassword != null && newPassword.isNotEmpty) {
-      // Dialog is already closed, now send the command
       await _sendCommand(
         'change_password_$newPassword',
         'Screen password changed successfully',
+        loadingCommandKey: 'change_screen_password',
       );
     }
   }
@@ -960,11 +996,11 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
 
     if (message != null && message.isNotEmpty) {
-      // Replace spaces with underscores
       final formattedMessage = message.replaceAll(' ', '_');
       await _sendCommand(
         'message_customer_$formattedMessage',
         'Message sent to customer successfully',
+        loadingCommandKey: 'send_customer_message',
       );
     }
   }
@@ -1023,7 +1059,11 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
         await _addToHiddenApps(selectedApps);
       }
 
-      await _sendCommand(command, 'Hide apps command sent successfully');
+      await _sendCommand(
+        command,
+        'Hide apps command sent successfully',
+        loadingCommandKey: 'hide_social_apps',
+      );
     }
   }
 
@@ -1077,20 +1117,35 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
         await _removeFromHiddenApps(selectedApps);
       }
 
-      await _sendCommand(command, 'Show apps command sent successfully');
+      await _sendCommand(
+        command,
+        'Show apps command sent successfully',
+        loadingCommandKey: 'show_social_apps',
+      );
     }
   }
 
   Future<void> _handleReactivateCustomer(CustomerProvider provider) async {
+    final customer = provider.singleCustomer;
+    if (customer == null || customer.imei1.isEmpty) {
+      if (!mounted) return;
+      showCustomSnackBar(
+        context,
+        'Customer IMEI is not available',
+        isError: true,
+      );
+      return;
+    }
+
     final success = await provider.updateCustomerIsActiveStatus(
-      widget.customerId,
-      0, // Set status to 0 (re-activate)
+      imei1: customer.imei1,
+      imei2: customer.imei2,
+      isActive: 0,
     );
 
     if (!mounted) return;
 
     if (success) {
-      // Refresh the customers list
       await provider.fetchCustomers(context, isRefresh: true);
 
       if (!mounted) return;
@@ -1101,7 +1156,6 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
         isError: false,
       );
 
-      // Go back to customer list screen
       Navigator.of(context).pop();
     } else {
       showCustomSnackBar(
@@ -1121,20 +1175,25 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: isLoading
-          ? Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [colorScheme.surface, colorScheme.tertiaryContainer],
-                ),
-              ),
-              child: const Center(child: CircularProgressIndicator()),
-            )
-          : Screenshot(
-              controller: _screenshotController,
-              child: NestedScrollView(
+      body: Stack(
+        children: [
+          isLoading
+              ? Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        colorScheme.surface,
+                        colorScheme.tertiaryContainer,
+                      ],
+                    ),
+                  ),
+                  child: const Center(child: CircularProgressIndicator()),
+                )
+              : Screenshot(
+                  controller: _screenshotController,
+                  child: NestedScrollView(
                 headerSliverBuilder: (context, innerBoxIsScrolled) {
                   return [
                     SliverAppBar(
@@ -1436,25 +1495,64 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 ),
               ),
             ),
+          if (provider.isRefreshingSingleCustomer)
+            Container(
+              color: Colors.black.withValues(alpha: 0.35),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
+        ],
+      ),
     );
   }
 
-  // Build the COMPLETE full screen content for long screenshot
+  /// Wraps off-screen capture tree with MediaQuery for Dimensions and layout.
+  Widget _wrapForOffscreenCapture({
+    required BuildContext context,
+    required double screenWidth,
+    required Widget child,
+  }) {
+    final mediaQuery = MediaQuery.of(context);
+    return MediaQuery(
+      data: mediaQuery.copyWith(size: Size(screenWidth, mediaQuery.size.height)),
+      child: Material(
+        color: Colors.white,
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildCustomerInitialsCircle(String name, {double radius = 28}) {
+    return Container(
+      width: radius * 2,
+      height: radius * 2,
+      decoration: BoxDecoration(
+        color: const Color(0xFF667eea).withValues(alpha: 0.2),
+        shape: BoxShape.circle,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        name.isNotEmpty ? name[0].toUpperCase() : 'C',
+        style: robotoBold(context).copyWith(
+          fontSize: 22,
+          color: const Color(0xFF667eea),
+        ),
+      ),
+    );
+  }
+
+  // Build header + Details tab only for long screenshot (full scroll height).
   Widget _buildLongScreenshotContent(
     dynamic customer,
-    CustomerProvider provider,
-  ) {
+    CustomerProvider provider, {
+    required double screenWidth,
+  }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final emiModel = provider.customerEmiModel;
-    final customerEmi = emiModel?.data?.customerEmi;
-    final emiDetails = emiModel?.data?.customerEmiDetails ?? [];
 
-    return Material(
-      color: Colors.white,
-      child: Container(
-        width: screenWidth,
-        decoration: const BoxDecoration(color: Colors.white),
+    return _wrapForOffscreenCapture(
+      context: context,
+      screenWidth: screenWidth,
+      child: ConstrainedBox(
+        constraints: BoxConstraints.tightFor(width: screenWidth),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1468,7 +1566,8 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 children: [
                   Icon(Icons.arrow_back, color: colorScheme.primary, size: 24),
                   const SizedBox(width: 16),
-                  Expanded(
+                  SizedBox(
+                    width: screenWidth - 16 - 24 - 16 - 24 - 24,
                     child: Text(
                       customer.customerCode.isNotEmpty
                           ? customer.customerCode.toUpperCase()
@@ -1476,6 +1575,8 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                       style: robotoBold(
                         context,
                       ).copyWith(color: colorScheme.primary, fontSize: 18),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Icon(Icons.share, color: colorScheme.primary, size: 24),
@@ -1520,7 +1621,8 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                     ),
                   ),
                   const SizedBox(width: 20),
-                  Expanded(
+                  SizedBox(
+                    width: screenWidth - 32 - 90 - 20,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1529,6 +1631,8 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                           style: robotoBold(
                             context,
                           ).copyWith(color: Colors.grey.shade800, fontSize: 20),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 8),
                         Row(
@@ -1633,32 +1737,10 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
               ),
             ),
 
-            // ========== TAB BAR SECTION ==========
-            Container(
-              width: double.infinity,
-              color: Colors.white,
-              child: Row(
-                children: [
-                  _buildScreenshotTab(
-                    'Details',
-                    _tabController.index == 0,
-                    colorScheme.primary,
-                  ),
-                  _buildScreenshotTab(
-                    'Commands',
-                    _tabController.index == 1,
-                    colorScheme.primary,
-                  ),
-                  _buildScreenshotTab(
-                    'EMI Details',
-                    _tabController.index == 2,
-                    colorScheme.primary,
-                  ),
-                ],
-              ),
-            ),
+            // ========== TAB BAR (Details selected) ==========
+            _buildScreenshotTabBar(screenWidth, colorScheme.primary),
 
-            // ========== MAIN CONTENT SECTION ==========
+            // ========== DETAILS TAB (same widgets as on screen) ==========
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -1669,431 +1751,11 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                   colors: [colorScheme.surface, colorScheme.tertiaryContainer],
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ===== CUSTOMER INFORMATION CARD =====
-                  _buildScreenshotCard(
-                    title: 'Customer Information',
-                    icon: Icons.person_outline,
-                    gradientColors: [
-                      const Color(0xFF667eea),
-                      const Color(0xFF764ba2),
-                    ],
-                    child: Column(
-                      children: [
-                        // Customer Code with Cust ID label in bold
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                'CUST ID: ',
-                                style: robotoRegular(context).copyWith(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  customer.customerCode.isNotEmpty
-                                      ? customer.customerCode.toUpperCase()
-                                      : 'N/A',
-                                  style: robotoBold(context).copyWith(
-                                    color: Colors.grey.shade800,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        _buildScreenshotInfoRow('Name', customer.customerName),
-                        _buildScreenshotInfoRow(
-                          'Phone',
-                          customer.customerMobileNo,
-                        ),
-
-                        // Unlock Code with toggle visibility
-                        _buildUnlockCodeRow(
-                          customer.unlockCode != null &&
-                                  customer.unlockCode!.isNotEmpty
-                              ? customer.unlockCode!
-                              : 'N/A',
-                        ),
-
-                        _buildScreenshotInfoRow(
-                          'Email',
-                          customer.email.isNotEmpty ? customer.email : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'CNIC',
-                          customer.cnic.isNotEmpty ? customer.cnic : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Address',
-                          customer.address.isNotEmpty
-                              ? customer.address
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Country',
-                          provider.getCountryNameById(customer.country),
-                        ),
-                        _buildScreenshotInfoRow(
-                          'State',
-                          provider.getStateNameById(customer.state),
-                        ),
-                        _buildScreenshotInfoRow(
-                          'City',
-                          provider.getCityNameById(customer.city),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ===== DEVICE INFORMATION CARD =====
-                  _buildScreenshotCard(
-                    title: 'Device Information',
-                    icon: Icons.smartphone,
-                    gradientColors: [
-                      const Color(0xFF11998e),
-                      const Color(0xFF38ef7d),
-                    ],
-                    child: Column(
-                      children: [
-                        _buildScreenshotInfoRow(
-                          'Mobile Type',
-                          customer.mobileType.isNotEmpty
-                              ? customer.mobileType
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Mobile Model',
-                          customer.mobileModel != null &&
-                                  customer.mobileModel!.isNotEmpty
-                              ? customer.mobileModel!
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Serial No',
-                          customer.serialNo.isNotEmpty
-                              ? customer.serialNo
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'IMEI 1',
-                          customer.imei1.isNotEmpty ? customer.imei1 : 'N/A',
-                        ),
-                        if (customer.imei2 != null &&
-                            customer.imei2!.isNotEmpty)
-                          _buildScreenshotInfoRow('IMEI 2', customer.imei2!),
-                        _buildScreenshotInfoRow(
-                          'Device Status',
-                          customer.deviceStatus.isNotEmpty
-                              ? customer.deviceStatus
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Status',
-                          customer.status.toUpperCase(),
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Lock Code',
-                          customer.lockCode.isNotEmpty
-                              ? customer.lockCode
-                              : 'N/A',
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ===== SIM DETAILS CARD =====
-                  _buildScreenshotCard(
-                    title: 'SIM Details',
-                    icon: Icons.sim_card,
-                    gradientColors: [
-                      const Color(0xFFf093fb),
-                      const Color(0xFFf5576c),
-                    ],
-                    child: Column(
-                      children: [
-                        _buildScreenshotInfoRow(
-                          'SIM Count',
-                          customer.simCount.isNotEmpty
-                              ? customer.simCount
-                              : 'N/A',
-                        ),
-                        if (customer.sim1NetworkName != null &&
-                            customer.sim1NetworkName!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 1 Network',
-                            customer.sim1NetworkName!,
-                          ),
-                        if (customer.sim1Number != null &&
-                            customer.sim1Number!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 1 Number',
-                            customer.sim1Number!,
-                          ),
-                        if (customer.sim1CountryIso != null &&
-                            customer.sim1CountryIso!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 1 Country',
-                            customer.sim1CountryIso!,
-                          ),
-                        if (customer.sim2NetworkName != null &&
-                            customer.sim2NetworkName!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 2 Network',
-                            customer.sim2NetworkName!,
-                          ),
-                        if (customer.sim2Number != null &&
-                            customer.sim2Number!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 2 Number',
-                            customer.sim2Number!,
-                          ),
-                        if (customer.sim2CountryIso != null &&
-                            customer.sim2CountryIso!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'SIM 2 Country',
-                            customer.sim2CountryIso!,
-                          ),
-                        if (customer.networkType != null &&
-                            customer.networkType!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'Network Type',
-                            customer.networkType!,
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ===== LOCATION DETAILS CARD =====
-                  _buildScreenshotCard(
-                    title: 'Location & Activity',
-                    icon: Icons.location_on,
-                    gradientColors: [
-                      const Color(0xFFFF512F),
-                      const Color(0xFFDD2476),
-                    ],
-                    child: Column(
-                      children: [
-                        _buildScreenshotInfoRow(
-                          'Actual Device Status',
-                          customer.actualDeviceStatus.isNotEmpty
-                              ? customer.actualDeviceStatus
-                              : 'N/A',
-                        ),
-                        _buildScreenshotInfoRow(
-                          'Last Activity',
-                          customer.actualDeviceStatusTime.isNotEmpty
-                              ? customer.actualDeviceStatusTime
-                              : 'N/A',
-                        ),
-                        if (customer.latitude != null &&
-                            customer.latitude!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'Latitude',
-                            customer.latitude!,
-                          ),
-                        if (customer.longitude != null &&
-                            customer.longitude!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'Longitude',
-                            customer.longitude!,
-                          ),
-                        _buildScreenshotInfoRow(
-                          'Register Status',
-                          customer.registerStatus.isNotEmpty
-                              ? customer.registerStatus
-                              : 'N/A',
-                        ),
-                        if (customer.registerTime != null &&
-                            customer.registerTime!.isNotEmpty)
-                          _buildScreenshotInfoRow(
-                            'Register Time',
-                            customer.registerTime!,
-                          ),
-                        _buildScreenshotInfoRow(
-                          'Created At',
-                          customer.createdAt.toString().substring(0, 16),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ===== EMI DETAILS CARD =====
-                  if (customerEmi != null || emiDetails.isNotEmpty)
-                    _buildScreenshotCard(
-                      title: 'EMI Summary',
-                      icon: Icons.payment,
-                      gradientColors: [
-                        const Color(0xFF4776E6),
-                        const Color(0xFF8E54E9),
-                      ],
-                      child: Column(
-                        children: [
-                          if (customerEmi != null) ...[
-                            _buildScreenshotInfoRow(
-                              'Total Amount',
-                              'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}',
-                            ),
-                            _buildScreenshotInfoRow(
-                              'Advance Amount',
-                              'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}',
-                            ),
-                            _buildScreenshotInfoRow(
-                              'Monthly EMI',
-                              'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}',
-                            ),
-                            _buildScreenshotInfoRow(
-                              'Total Months',
-                              '${customerEmi.totalMonthsParsed}',
-                            ),
-                            if (customerEmi.purchaseDate.isNotEmpty)
-                              _buildScreenshotInfoRow(
-                                'Purchase Date',
-                                customerEmi.purchaseDate,
-                              ),
-                            _buildScreenshotInfoRow(
-                              'Paid EMIs',
-                              '${emiDetails.where((e) => e.isPaidStatus).length}',
-                            ),
-                            _buildScreenshotInfoRow(
-                              'Remaining EMIs',
-                              '${emiDetails.where((e) => !e.isPaidStatus).length}',
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                  // ===== EMI SCHEDULE =====
-                  if (emiDetails.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    _buildScreenshotCard(
-                      title: 'EMI Schedule (${emiDetails.length} months)',
-                      icon: Icons.calendar_month,
-                      gradientColors: [
-                        const Color(0xFF11998e),
-                        const Color(0xFF38ef7d),
-                      ],
-                      child: Column(
-                        children: emiDetails.asMap().entries.map((entry) {
-                          final index = entry.key;
-                          final emi = entry.value;
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: Colors.grey.shade200,
-                                  width: index < emiDetails.length - 1 ? 1 : 0,
-                                ),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: emi.isPaidStatus
-                                        ? Colors.green.withValues(alpha: 0.1)
-                                        : Colors.orange.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: robotoBold(context).copyWith(
-                                        color: emi.isPaidStatus
-                                            ? Colors.green
-                                            : Colors.orange,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Due: ${emi.emiDate}',
-                                        style: robotoRegular(context).copyWith(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade600,
-                                        ),
-                                      ),
-                                      Text(
-                                        'Rs. ${emi.monthlyAmountParsed.toStringAsFixed(0)}',
-                                        style: robotoBold(
-                                          context,
-                                        ).copyWith(fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: emi.isPaidStatus
-                                        ? Colors.green
-                                        : Colors.orange,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    emi.isPaidStatus ? 'PAID' : 'PENDING',
-                                    style: robotoBold(context).copyWith(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-            // ========== FOOTER SECTION ==========
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              color: Colors.grey.shade100,
-              child: Column(
-                children: [
-                  Text(
-                    'Device Guardian Admin',
-                    style: robotoBold(
-                      context,
-                    ).copyWith(color: colorScheme.primary, fontSize: 14),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Generated on: ${DateTime.now().toString().substring(0, 19)}',
-                    style: robotoRegular(
-                      context,
-                    ).copyWith(color: Colors.grey.shade600, fontSize: 11),
-                  ),
-                ],
+              child: _buildDetailsTabContent(
+                context,
+                provider,
+                contentWidth: screenWidth,
+                forScreenshot: true,
               ),
             ),
           ],
@@ -2102,13 +1764,253 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
   }
 
-  // Build tab for screenshot
+  // Details tab body — shared by scroll view and long screenshot.
+  Widget _buildDetailsTabContent(
+    BuildContext context,
+    CustomerProvider provider, {
+    double? contentWidth,
+    bool forScreenshot = false,
+  }) {
+    final customer = provider.singleCustomer!;
+
+    Widget content = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Customer Information Section
+        _buildModernCard(
+          context: context,
+          title: 'Customer Information',
+          icon: Icons.person_outline,
+          gradientColors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF667eea).withValues(alpha: 0.1),
+                      const Color(0xFF764ba2).withValues(alpha: 0.05),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  children: [
+                    _buildCustomerInitialsCircle(customer.customerName),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'CUST ID: ',
+                                style: robotoBold(context).copyWith(
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  customer.customerCode.isNotEmpty
+                                      ? customer.customerCode.toUpperCase()
+                                      : 'N/A',
+                                  style: robotoBold(context).copyWith(
+                                    fontSize: Dimensions.fontSizeDefault(
+                                      context,
+                                    ),
+                                    color: Colors.grey.shade800,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            customer.customerName,
+                            style: robotoBold(context).copyWith(
+                              fontSize: Dimensions.fontSizeLarge(context),
+                              color: Colors.grey.shade800,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.phone,
+                                size: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                customer.customerMobileNo,
+                                style: robotoRegular(context).copyWith(
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              _buildUnlockCodeInfoItem(
+                context,
+                customer.unlockCode != null && customer.unlockCode!.isNotEmpty
+                    ? customer.unlockCode!
+                    : 'N/A',
+                const Color(0xFF667eea),
+                forScreenshot: forScreenshot,
+              ),
+              const SizedBox(height: 10),
+              _buildInfoGrid(context, [
+                _InfoGridItem(
+                  Icons.email_outlined,
+                  'Email',
+                  customer.email.isNotEmpty ? customer.email : 'N/A',
+                ),
+                _InfoGridItem(
+                  Icons.badge_outlined,
+                  'CNIC',
+                  customer.cnic.isNotEmpty ? customer.cnic : 'N/A',
+                ),
+              ]),
+              const SizedBox(height: 10),
+              _buildFullWidthInfoItem(
+                context,
+                Icons.home_outlined,
+                'Address',
+                customer.address.isNotEmpty ? customer.address : 'N/A',
+                const Color(0xFF667eea),
+              ),
+              const SizedBox(height: 10),
+              _buildInfoGrid(context, [
+                _InfoGridItem(
+                  Icons.location_city_outlined,
+                  'State',
+                  provider.getStateNameById(customer.state),
+                ),
+                _InfoGridItem(
+                  Icons.apartment_outlined,
+                  'City',
+                  provider.getCityNameById(customer.city),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              _buildFullWidthInfoItem(
+                context,
+                Icons.flag_outlined,
+                'Country',
+                provider.getCountryNameById(customer.country),
+                const Color(0xFF667eea),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildModernCard(
+          context: context,
+          title: 'Device Information',
+          icon: Icons.smartphone,
+          gradientColors: [const Color(0xFF11998e), const Color(0xFF38ef7d)],
+          child: Column(
+            children: [
+              _buildInfoGrid(context, [
+                _InfoGridItem(
+                  customer.mobileType.toLowerCase() == 'android'
+                      ? Icons.android
+                      : customer.mobileType.toLowerCase() == 'iphone'
+                      ? Icons.apple
+                      : Icons.phone_android,
+                  'Mobile Type',
+                  customer.mobileType.isNotEmpty ? customer.mobileType : 'N/A',
+                ),
+                _InfoGridItem(
+                  Icons.phone_android,
+                  'Mobile Model',
+                  customer.mobileModel != null &&
+                          customer.mobileModel!.isNotEmpty
+                      ? customer.mobileModel!
+                      : 'N/A',
+                ),
+              ], accentColor: const Color(0xFF11998e)),
+              const SizedBox(height: 10),
+              _buildFullWidthInfoItem(
+                context,
+                Icons.tag,
+                'Serial',
+                customer.serialNo.isNotEmpty ? customer.serialNo : 'N/A',
+                const Color(0xFF11998e),
+              ),
+              const SizedBox(height: 8),
+              _buildFullWidthInfoItem(
+                context,
+                Icons.fingerprint,
+                'IMEI 1',
+                customer.imei1.isNotEmpty ? customer.imei1 : 'N/A',
+                const Color(0xFF11998e),
+              ),
+              if (customer.imei2 != null && customer.imei2!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildFullWidthInfoItem(
+                  context,
+                  Icons.fingerprint,
+                  'IMEI 2',
+                  customer.imei2!,
+                  const Color(0xFF11998e),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildSimDetailsCard(
+          context,
+          provider,
+          forScreenshot: true,
+        ),
+      ],
+    );
+
+    if (contentWidth != null) {
+      content = SizedBox(width: contentWidth, child: content);
+    }
+    return content;
+  }
+
+  Widget _buildScreenshotTabBar(double screenWidth, Color primaryColor) {
+    final tabWidth = screenWidth / 3;
+    return ColoredBox(
+      color: Colors.white,
+      child: Row(
+        children: [
+          _buildScreenshotTab('Details', true, primaryColor, tabWidth),
+          _buildScreenshotTab('Commands', false, primaryColor, tabWidth),
+          _buildScreenshotTab('EMI Details', false, primaryColor, tabWidth),
+        ],
+      ),
+    );
+  }
+
   Widget _buildScreenshotTab(
     String title,
     bool isSelected,
     Color primaryColor,
+    double width,
   ) {
-    return Expanded(
+    return SizedBox(
+      width: width,
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
@@ -2131,311 +2033,6 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
   }
 
-  // Screenshot card widget
-  Widget _buildScreenshotCard({
-    required String title,
-    required IconData icon,
-    required List<Color> gradientColors,
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withValues(alpha: 0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(colors: gradientColors),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(12),
-                topRight: Radius.circular(12),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: robotoBold(
-                    context,
-                  ).copyWith(color: Colors.white, fontSize: 14),
-                ),
-              ],
-            ),
-          ),
-          // Content
-          Padding(padding: const EdgeInsets.all(12), child: child),
-        ],
-      ),
-    );
-  }
-
-  // Screenshot info row
-  Widget _buildScreenshotInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: robotoRegular(
-                context,
-              ).copyWith(color: Colors.grey.shade600, fontSize: 13),
-            ),
-          ),
-          const Text(': ', style: TextStyle(color: Colors.grey)),
-          Expanded(
-            child: Text(
-              value,
-              style: robotoBold(
-                context,
-              ).copyWith(color: Colors.grey.shade800, fontSize: 13),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Build unlock code row with toggle visibility
-  Widget _buildUnlockCodeRow(String unlockCode) {
-    // Only mask if unlock code exists and is not 'N/A'
-    final shouldMask = unlockCode.isNotEmpty && unlockCode != 'N/A';
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              'Unlock Code',
-              style: robotoRegular(
-                context,
-              ).copyWith(color: Colors.grey.shade600, fontSize: 13),
-            ),
-          ),
-          const Text(': ', style: TextStyle(color: Colors.grey)),
-          Expanded(
-            child: Text(
-              shouldMask && !_isUnlockCodeVisible
-                  ? '*' * unlockCode.length
-                  : unlockCode,
-              style: robotoBold(context).copyWith(
-                color: Colors.grey.shade800,
-                fontSize: 13,
-                letterSpacing: shouldMask && !_isUnlockCodeVisible ? 1 : 0,
-              ),
-            ),
-          ),
-          if (shouldMask)
-            IconButton(
-              icon: Icon(
-                _isUnlockCodeVisible ? Icons.visibility : Icons.visibility_off,
-                size: 20,
-                color: Colors.grey.shade600,
-              ),
-              onPressed: () {
-                setState(() {
-                  _isUnlockCodeVisible = !_isUnlockCodeVisible;
-                });
-              },
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              tooltip: _isUnlockCodeVisible
-                  ? 'Hide unlock code'
-                  : 'Show unlock code',
-            ),
-        ],
-      ),
-    );
-  }
-
-  // Build commands tab content for screenshot
-  Widget _buildCommandsTabContent(CustomerProvider provider) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Commands Tab', style: robotoBold(context).copyWith(fontSize: 16)),
-        const SizedBox(height: 8),
-        Text(
-          'Commands are not captured in screenshot for security reasons.',
-          style: robotoRegular(context),
-        ),
-      ],
-    );
-  }
-
-  // Build EMI tab content for screenshot
-  Widget _buildEmiDetailsTabContent(CustomerProvider provider) {
-    final emiModel = provider.customerEmiModel;
-    final customerEmi = emiModel?.data?.customerEmi;
-    final emiDetails = emiModel?.data?.customerEmiDetails ?? [];
-
-    if (customerEmi == null && emiDetails.isEmpty) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'EMI Details',
-            style: robotoBold(context).copyWith(fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          Text('No EMI records found.', style: robotoRegular(context)),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('EMI Summary', style: robotoBold(context).copyWith(fontSize: 16)),
-        const SizedBox(height: 12),
-        if (customerEmi != null) ...[
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildScreenshotEmiInfoRow(
-                  'Total Amount',
-                  'Rs. ${customerEmi.totalAmountParsed.toStringAsFixed(0)}',
-                ),
-                _buildScreenshotEmiInfoRow(
-                  'Advance Amount',
-                  'Rs. ${customerEmi.advanceAmountParsed.toStringAsFixed(0)}',
-                ),
-                _buildScreenshotEmiInfoRow(
-                  'Monthly Amount',
-                  'Rs. ${customerEmi.monthlyAmountParsed.toStringAsFixed(0)}',
-                ),
-                _buildScreenshotEmiInfoRow(
-                  'Total Months',
-                  '${customerEmi.totalMonthsParsed}',
-                ),
-                if (customerEmi.purchaseDate.isNotEmpty)
-                  _buildScreenshotEmiInfoRow(
-                    'Purchase Date',
-                    customerEmi.purchaseDate,
-                  ),
-              ],
-            ),
-          ),
-        ],
-        if (emiDetails.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Text(
-            'EMI Schedule',
-            style: robotoBold(context).copyWith(fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          ...emiDetails.asMap().entries.map((entry) {
-            final index = entry.key;
-            final emi = entry.value;
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey.shade300),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Month ${index + 1}',
-                        style: robotoBold(context).copyWith(fontSize: 13),
-                      ),
-                      Text(
-                        'Due: ${emi.emiDate}',
-                        style: robotoRegular(
-                          context,
-                        ).copyWith(fontSize: 12, color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Rs. ${emi.monthlyAmountParsed.toStringAsFixed(0)}',
-                        style: robotoBold(context).copyWith(fontSize: 13),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: emi.isPaidStatus
-                              ? Colors.green
-                              : Colors.orange,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          emi.isPaidStatus ? 'PAID' : 'PENDING',
-                          style: robotoRegular(
-                            context,
-                          ).copyWith(color: Colors.white, fontSize: 10),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ],
-    );
-  }
-
-  // Helper for EMI info row in screenshot
-  Widget _buildScreenshotEmiInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: robotoRegular(
-              context,
-            ).copyWith(color: Colors.grey.shade600, fontSize: 13),
-          ),
-          Text(value, style: robotoBold(context).copyWith(fontSize: 13)),
-        ],
-      ),
-    );
-  }
 
   // Capture screenshot and share
   Future<void> _captureAndShareScreenshot(dynamic customer) async {
@@ -2448,20 +2045,51 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     try {
       final provider = context.read<CustomerProvider>();
 
-      // Show loading indicator
       showCustomSnackBar(
         context,
-        'Capturing long screenshot...',
+        'Capturing screenshot...',
         isError: false,
       );
 
-      // Capture the full content using captureFromLongWidget
+      // Always capture Details tab (header + full scrollable details content).
+      if (_tabController.index != 0) {
+        _tabController.animateTo(0);
+        await Future.delayed(const Duration(milliseconds: 350));
+      }
+
+      if (customer.profileImage.isNotEmpty) {
+        try {
+          await precacheImage(
+            NetworkImage(
+              '${AppConstants.imageUrl}${customer.profileImage}',
+            ),
+            context,
+          );
+        } catch (_) {}
+      }
+
+      final mediaQuery = MediaQuery.of(context);
+      final screenWidth = mediaQuery.size.width;
+      final pixelRatio = mediaQuery.devicePixelRatio;
+
+      // Required: bounded width so Expanded/Flexible children layout correctly.
+      final captureConstraints = BoxConstraints(
+        minWidth: screenWidth,
+        maxWidth: screenWidth,
+        maxHeight: double.infinity,
+      );
+
       final Uint8List imageBytes = await _screenshotController
           .captureFromLongWidget(
-            _buildLongScreenshotContent(customer, provider),
-            delay: const Duration(milliseconds: 100),
-            pixelRatio: MediaQuery.of(context).devicePixelRatio,
+            _buildLongScreenshotContent(
+              customer,
+              provider,
+              screenWidth: screenWidth,
+            ),
+            delay: const Duration(milliseconds: 800),
+            pixelRatio: pixelRatio,
             context: context,
+            constraints: captureConstraints,
           );
 
       // Get temp directory and save the image
@@ -2537,240 +2165,7 @@ IMEI: ${customer.imei1}
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Customer Information Section
-          _buildModernCard(
-            context: context,
-            title: 'Customer Information',
-            icon: Icons.person_outline,
-            gradientColors: [const Color(0xFF667eea), const Color(0xFF764ba2)],
-            child: Column(
-              children: [
-                // Top row - Avatar, Name and Phone in a horizontal layout
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF667eea).withValues(alpha: 0.1),
-                        const Color(0xFF764ba2).withValues(alpha: 0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        backgroundColor: const Color(
-                          0xFF667eea,
-                        ).withValues(alpha: 0.2),
-                        child: Text(
-                          customer.customerName.isNotEmpty
-                              ? customer.customerName[0].toUpperCase()
-                              : 'C',
-                          style: robotoBold(context).copyWith(
-                            fontSize: 22,
-                            color: const Color(0xFF667eea),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // CUST ID with customer code
-                            Row(
-                              children: [
-                                Text(
-                                  'CUST ID: ',
-                                  style: robotoBold(context).copyWith(
-                                    fontSize: Dimensions.fontSizeSmall(context),
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    customer.customerCode.isNotEmpty
-                                        ? customer.customerCode.toUpperCase()
-                                        : 'N/A',
-                                    style: robotoBold(context).copyWith(
-                                      fontSize: Dimensions.fontSizeDefault(
-                                        context,
-                                      ),
-                                      color: Colors.grey.shade800,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            // Customer Name
-                            Text(
-                              customer.customerName,
-                              style: robotoBold(context).copyWith(
-                                fontSize: Dimensions.fontSizeLarge(context),
-                                color: Colors.grey.shade800,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.phone,
-                                  size: 14,
-                                  color: Colors.grey.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  customer.customerMobileNo,
-                                  style: robotoRegular(context).copyWith(
-                                    fontSize: Dimensions.fontSizeSmall(context),
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Unlock Code with toggle visibility - full width
-                _buildUnlockCodeInfoItem(
-                  context,
-                  customer.unlockCode != null && customer.unlockCode!.isNotEmpty
-                      ? customer.unlockCode!
-                      : 'N/A',
-                  const Color(0xFF667eea),
-                ),
-                const SizedBox(height: 10),
-
-                // Grid of info items
-                _buildInfoGrid(context, [
-                  _InfoGridItem(
-                    Icons.email_outlined,
-                    'Email',
-                    customer.email.isNotEmpty ? customer.email : 'N/A',
-                  ),
-                  _InfoGridItem(
-                    Icons.badge_outlined,
-                    'CNIC',
-                    customer.cnic.isNotEmpty ? customer.cnic : 'N/A',
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                // Address - full width
-                _buildFullWidthInfoItem(
-                  context,
-                  Icons.home_outlined,
-                  'Address',
-                  customer.address.isNotEmpty ? customer.address : 'N/A',
-                  const Color(0xFF667eea),
-                ),
-                const SizedBox(height: 10),
-                // Location info: State, City - using names from provider
-                _buildInfoGrid(context, [
-                  _InfoGridItem(
-                    Icons.location_city_outlined,
-                    'State',
-                    provider.getStateNameById(customer.state),
-                  ),
-                  _InfoGridItem(
-                    Icons.apartment_outlined,
-                    'City',
-                    provider.getCityNameById(customer.city),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                // Country - full width - using name from provider
-                _buildFullWidthInfoItem(
-                  context,
-                  Icons.flag_outlined,
-                  'Country',
-                  provider.getCountryNameById(customer.country),
-                  const Color(0xFF667eea),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Device Information Section
-          _buildModernCard(
-            context: context,
-            title: 'Device Information',
-            icon: Icons.smartphone,
-            gradientColors: [const Color(0xFF11998e), const Color(0xFF38ef7d)],
-            child: Column(
-              children: [
-                _buildInfoGrid(context, [
-                  _InfoGridItem(
-                    customer.mobileType.toLowerCase() == 'android'
-                        ? Icons.android
-                        : customer.mobileType.toLowerCase() == 'iphone'
-                        ? Icons.apple
-                        : Icons.phone_android,
-                    'Mobile Type',
-                    customer.mobileType.isNotEmpty
-                        ? customer.mobileType
-                        : 'N/A',
-                  ),
-                  _InfoGridItem(
-                    Icons.phone_android,
-                    'Mobile Model',
-                    customer.mobileModel != null &&
-                            customer.mobileModel!.isNotEmpty
-                        ? customer.mobileModel!
-                        : 'N/A',
-                  ),
-                ], accentColor: const Color(0xFF11998e)),
-                const SizedBox(height: 10),
-                _buildFullWidthInfoItem(
-                  context,
-                  Icons.tag,
-                  'Serial',
-                  customer.serialNo.isNotEmpty ? customer.serialNo : 'N/A',
-                  const Color(0xFF11998e),
-                ),
-                const SizedBox(height: 8),
-                _buildFullWidthInfoItem(
-                  context,
-                  Icons.fingerprint,
-                  'IMEI 1',
-                  customer.imei1.isNotEmpty ? customer.imei1 : 'N/A',
-                  const Color(0xFF11998e),
-                ),
-                if (customer.imei2 != null && customer.imei2!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _buildFullWidthInfoItem(
-                    context,
-                    Icons.fingerprint,
-                    'IMEI 2',
-                    customer.imei2!,
-                    const Color(0xFF11998e),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // SIM Details Section
-          _buildSimDetailsCard(context, provider),
-        ],
-      ),
+      child: _buildDetailsTabContent(context, provider),
     );
   }
 
@@ -2971,10 +2366,14 @@ IMEI: ${customer.imei1}
   Widget _buildUnlockCodeInfoItem(
     BuildContext context,
     String unlockCode,
-    Color accentColor,
-  ) {
+    Color accentColor, {
+    bool forScreenshot = false,
+  }) {
     // Only mask if unlock code exists and is not 'N/A'
     final shouldMask = unlockCode.isNotEmpty && unlockCode != 'N/A';
+    final displayCode = shouldMask && !_isUnlockCodeVisible
+        ? '*' * unlockCode.length
+        : unlockCode;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -3008,19 +2407,21 @@ IMEI: ${customer.imei1}
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  shouldMask && !_isUnlockCodeVisible
-                      ? '*' * unlockCode.length
-                      : unlockCode,
+                  displayCode,
                   style: robotoMedium(context).copyWith(
-                    fontSize: Dimensions.fontSizeSmall(context),
+                    fontSize: forScreenshot
+                        ? 12
+                        : Dimensions.fontSizeSmall(context),
                     color: Colors.grey.shade800,
                     letterSpacing: shouldMask && !_isUnlockCodeVisible ? 1 : 0,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          if (shouldMask)
+          if (shouldMask && !forScreenshot)
             IconButton(
               icon: Icon(
                 _isUnlockCodeVisible ? Icons.visibility : Icons.visibility_off,
@@ -3037,6 +2438,15 @@ IMEI: ${customer.imei1}
               tooltip: _isUnlockCodeVisible
                   ? 'Hide unlock code'
                   : 'Show unlock code',
+            )
+          else if (shouldMask && forScreenshot)
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(
+                _isUnlockCodeVisible ? Icons.visibility : Icons.visibility_off,
+                size: 20,
+                color: accentColor,
+              ),
             ),
         ],
       ),
@@ -3044,7 +2454,11 @@ IMEI: ${customer.imei1}
   }
 
   // SIM Details Card
-  Widget _buildSimDetailsCard(BuildContext context, CustomerProvider provider) {
+  Widget _buildSimDetailsCard(
+    BuildContext context,
+    CustomerProvider provider, {
+    bool forScreenshot = false,
+  }) {
     const gradientColors = [Color(0xFF4776E6), Color(0xFF8E54E9)];
 
     return Container(
@@ -3099,27 +2513,28 @@ IMEI: ${customer.imei1}
                     ),
                   ),
                 ),
-                // Refresh button
-                InkWell(
-                  onTap: provider.isSimDetailsLoading
-                      ? null
-                      : () => provider.fetchSimDetails(widget.customerId),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Icon(
-                      Icons.refresh,
-                      size: 18,
-                      color: provider.isSimDetailsLoading
-                          ? Colors.white60
-                          : Colors.white,
+                if (!forScreenshot)
+                  InkWell(
+                    onTap: provider.isSimDetailsLoading
+                        ? null
+                        : () =>
+                            provider.fetchSimDetails(widget.customerId),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Icon(
+                        Icons.refresh,
+                        size: 18,
+                        color: provider.isSimDetailsLoading
+                            ? Colors.white60
+                            : Colors.white,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -3569,6 +2984,7 @@ IMEI: ${customer.imei1}
                   color: Colors.deepOrange,
                   command: 'lock',
                   successMessage: 'Lock command sent successfully',
+                  refreshCustomerAfterSuccess: true,
                 ),
               ),
               const SizedBox(width: Dimensions.paddingSizeExtraSmall),
@@ -3582,6 +2998,7 @@ IMEI: ${customer.imei1}
                   color: Colors.green,
                   command: 'unlock',
                   successMessage: 'Unlock command sent successfully',
+                  refreshCustomerAfterSuccess: true,
                 ),
               ),
             ],
@@ -4832,6 +4249,7 @@ IMEI: ${customer.imei1}
     required Color color,
     required String command,
     required String successMessage,
+    bool refreshCustomerAfterSuccess = false,
   }) {
     final isLoading = provider.isCommandLoading(command);
 
@@ -4845,7 +4263,12 @@ IMEI: ${customer.imei1}
               child: InkWell(
                 onTap: isLoading
                     ? null
-                    : () => _showPinDialog(command, successMessage),
+                    : () => _showPinDialog(
+                          command,
+                          successMessage,
+                          refreshCustomerAfterSuccess:
+                              refreshCustomerAfterSuccess,
+                        ),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
@@ -4942,6 +4365,9 @@ IMEI: ${customer.imei1}
     required IconData icon,
     required Color color,
   }) {
+    const loadingKey = 'change_screen_password';
+    final isLoading = provider.isCommandLoading(loadingKey);
+
     return SizedBox(
       height: 100,
       width: MediaQuery.of(context).size.width * 0.45,
@@ -4950,7 +4376,7 @@ IMEI: ${customer.imei1}
           children: <Widget>[
             Expanded(
               child: InkWell(
-                onTap: () => _showChangePasswordDialog(),
+                onTap: isLoading ? null : () => _showChangePasswordDialog(),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
@@ -4959,29 +4385,38 @@ IMEI: ${customer.imei1}
                     ),
                   ),
                   child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20, color: Colors.white),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 20, color: Colors.white),
+                              const SizedBox(height: 8),
+                              Text(
+                                label,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                urdulabel,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        Text(
-                          urdulabel,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -5000,6 +4435,9 @@ IMEI: ${customer.imei1}
     required IconData icon,
     required Color color,
   }) {
+    const loadingKey = 'send_customer_message';
+    final isLoading = provider.isCommandLoading(loadingKey);
+
     return SizedBox(
       height: 100,
       width: MediaQuery.of(context).size.width * 0.45,
@@ -5008,7 +4446,7 @@ IMEI: ${customer.imei1}
           children: <Widget>[
             Expanded(
               child: InkWell(
-                onTap: () => _showMessageDialog(),
+                onTap: isLoading ? null : () => _showMessageDialog(),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
@@ -5017,29 +4455,38 @@ IMEI: ${customer.imei1}
                     ),
                   ),
                   child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20, color: Colors.white),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 20, color: Colors.white),
+                              const SizedBox(height: 8),
+                              Text(
+                                label,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                urdulabel,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        Text(
-                          urdulabel,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -5059,6 +4506,9 @@ IMEI: ${customer.imei1}
     required Color color,
     required bool isHideMode,
   }) {
+    final loadingKey = isHideMode ? 'hide_social_apps' : 'show_social_apps';
+    final isLoading = provider.isCommandLoading(loadingKey);
+
     return SizedBox(
       height: 100,
       width: MediaQuery.of(context).size.width * 0.45,
@@ -5067,8 +4517,11 @@ IMEI: ${customer.imei1}
           children: <Widget>[
             Expanded(
               child: InkWell(
-                onTap: () =>
-                    isHideMode ? _showHideAppsDialog() : _showShowAppsDialog(),
+                onTap: isLoading
+                    ? null
+                    : () => isHideMode
+                    ? _showHideAppsDialog()
+                    : _showShowAppsDialog(),
                 child: Container(
                   decoration: BoxDecoration(
                     color: color,
@@ -5077,29 +4530,38 @@ IMEI: ${customer.imei1}
                     ),
                   ),
                   child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 20, color: Colors.white),
-                        const SizedBox(height: 8),
-                        Text(
-                          label,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
+                    child: isLoading
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(icon, size: 20, color: Colors.white),
+                              const SizedBox(height: 8),
+                              Text(
+                                label,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                urdulabel,
+                                style: robotoBold(context).copyWith(
+                                  color: Colors.white,
+                                  fontSize: Dimensions.fontSizeSmall(context),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                        Text(
-                          urdulabel,
-                          style: robotoBold(context).copyWith(
-                            color: Colors.white,
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -5176,34 +4638,38 @@ IMEI: ${customer.imei1}
   // Handle Uninstall command with special behavior
   Future<void> _handleUninstall() async {
     final provider = context.read<CustomerProvider>();
+    provider.setCommandLoading('uninstall', true);
 
-    final ok = await provider.sendMobileNotification(
-      customerId: widget.customerId,
-      status: 'uninstall',
-    );
-
-    if (!mounted) return;
-
-    if (ok) {
-      // Refresh the customers list
-      await provider.fetchCustomers(context, isRefresh: true);
+    bool ok = false;
+    try {
+      ok = await provider.sendMobileNotification(
+        customerId: widget.customerId,
+        status: 'uninstall',
+      );
 
       if (!mounted) return;
 
-      showCustomSnackBar(
-        context,
-        'UnInstall request sent successfully',
-        isError: false,
-      );
+      if (ok) {
+        await provider.fetchCustomers(context, isRefresh: true);
 
-      // Go back to customer list screen
-      Navigator.of(context).pop();
-    } else {
-      showCustomSnackBar(
-        context,
-        'Failed to send uninstall command',
-        isError: true,
-      );
+        if (!mounted) return;
+
+        showCustomSnackBar(
+          context,
+          'UnInstall request sent successfully',
+          isError: false,
+        );
+
+        Navigator.of(context).pop();
+      } else {
+        showCustomSnackBar(
+          context,
+          'Failed to send uninstall command',
+          isError: true,
+        );
+      }
+    } finally {
+      provider.setCommandLoading('uninstall', false);
     }
   }
 

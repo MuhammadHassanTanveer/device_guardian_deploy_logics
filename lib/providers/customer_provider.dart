@@ -1436,6 +1436,7 @@ class CustomerProvider with ChangeNotifier {
     singleUserDevicesError = null;
     customerEmiModel = null;
     emiError = null;
+    isRefreshingSingleCustomer = false;
     existingMobilePictures.clear();
     existingDocuments.clear();
     removedMobilePictures.clear();
@@ -1769,6 +1770,18 @@ class CustomerProvider with ChangeNotifier {
   bool isCommandLoading(String command) =>
       commandLoadingStates[command] ?? false;
 
+  void setCommandLoading(String command, bool loading) {
+    if (loading) {
+      commandLoadingStates[command] = true;
+    } else {
+      commandLoadingStates.remove(command);
+    }
+    notifyListeners();
+  }
+
+  /// True while refreshing single customer after lock/unlock commands.
+  bool isRefreshingSingleCustomer = false;
+
   /// Fetch single user's devices/status for a customer id
   /// GET: api/mobile/customers/{customerId}
   /// [showLoading] - if false, won't show full screen loading (used for silent refresh after commands)
@@ -1892,99 +1905,91 @@ class CustomerProvider with ChangeNotifier {
     }
   }
 
+  Future<bool> _postMobileNotification({
+    required int customerId,
+    required String status,
+  }) async {
+    final url = Uri.parse('${AppConstants.baseUrl}/mobile/notifications/send');
+    final prefs = await SharedPreferences.getInstance();
+    final authToken = prefs.getString('auth_token') ?? '';
+
+    final headers = <String, String>{
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (authToken.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+
+    debugPrint('========================================');
+    debugPrint('Sending Mobile Notification');
+    debugPrint('URL: $url');
+    debugPrint('Customer ID: $customerId');
+    debugPrint('Status: $status');
+    debugPrint('========================================');
+
+    final response = await http.post(
+      url,
+      headers: headers,
+      body: <String, String>{
+        'customer_id': customerId.toString(),
+        'status': status,
+      },
+    );
+
+    debugPrint(
+      'Mobile Notification Response: ${response.statusCode} ${response.body}',
+    );
+
+    if (response.statusCode == 401) {
+      await SessionManager.handleSessionExpiry(response.statusCode);
+      return false;
+    }
+
+    return response.statusCode == 200 || response.statusCode == 201;
+  }
+
   /// Send mobile notification using POST api/mobile/notifications/send
-  /// @param customerId - customer ID
-  /// @param status - notification status/message
   Future<bool> sendMobileNotification({
     required int customerId,
     required String status,
   }) async {
-    // Set the loading state for this specific command
-    commandLoadingStates['send_notification'] = true;
-    notifyListeners();
-
     try {
-      final url = Uri.parse(
-        '${AppConstants.baseUrl}/mobile/notifications/send',
+      return await _postMobileNotification(
+        customerId: customerId,
+        status: status,
       );
-      final prefs = await SharedPreferences.getInstance();
-      final authToken = prefs.getString('auth_token') ?? '';
-
-      final headers = <String, String>{
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      };
-      if (authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $authToken';
-      }
-
-      debugPrint('========================================');
-      debugPrint('Sending Mobile Notification');
-      debugPrint('URL: $url');
-      debugPrint('Headers: $headers');
-      debugPrint('Customer ID: $customerId');
-      debugPrint('Status: $status');
-      debugPrint(
-        'Auth Token: ${authToken.isNotEmpty ? "Present (${authToken.length} chars)" : "Missing"}',
-      );
-      debugPrint('========================================');
-
-      // Using form-urlencoded format (like Postman default)
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: <String, String>{
-          'customer_id': customerId.toString(),
-          'status': status,
-        },
-      );
-
-      // Alternative: If API expects JSON format, replace above with:
-      // final headers = <String, String>{
-      //   'Accept': 'application/json',
-      //   'Content-Type': 'application/json',
-      // };
-      // if (authToken.isNotEmpty) {
-      //   headers['Authorization'] = 'Bearer $authToken';
-      // }
-      // final response = await http.post(
-      //   url,
-      //   headers: headers,
-      //   body: jsonEncode({
-      //     'customer_id': customerId,
-      //     'status': status,
-      //   }),
-      // );
-
-      debugPrint('========================================');
-      debugPrint('Mobile Notification Response');
-      debugPrint('Status Code: ${response.statusCode}');
-      debugPrint('Response Body: ${response.body}');
-      debugPrint('Response Headers: ${response.headers}');
-      debugPrint('========================================');
-
-      if (response.statusCode == 401) {
-        await SessionManager.handleSessionExpiry(response.statusCode);
-        return false;
-      }
-
-      final ok = response.statusCode == 200 || response.statusCode == 201;
-
-      if (!ok) {
-        debugPrint('❌ Error: API returned status ${response.statusCode}');
-        debugPrint('Response: ${response.body}');
-      } else {
-        debugPrint('✅ Mobile notification sent successfully');
-      }
-
-      return ok;
     } catch (e, stackTrace) {
       debugPrint('❌ Exception sending mobile notification: $e');
       debugPrint('Stack trace: $stackTrace');
       return false;
+    }
+  }
+
+  /// Sends notification, then GET api/mobile/customers/{customerId} for latest data.
+  Future<bool> sendMobileNotificationAndRefreshCustomer({
+    required BuildContext context,
+    required int customerId,
+    required String status,
+  }) async {
+    isRefreshingSingleCustomer = true;
+    notifyListeners();
+
+    try {
+      final notified = await _postMobileNotification(
+        customerId: customerId,
+        status: status,
+      );
+      if (!notified) return false;
+
+      await getSingleCustomer(context, customerId);
+      return singleCustomer != null;
+    } catch (e, stackTrace) {
+      debugPrint('Error sending notification and refreshing customer: $e');
+      debugPrint('Stack trace: $stackTrace');
+      return false;
     } finally {
-      // Reset the loading state
-      commandLoadingStates['send_notification'] = false;
+      isRefreshingSingleCustomer = false;
       notifyListeners();
     }
   }
@@ -2435,9 +2440,12 @@ class CustomerProvider with ChangeNotifier {
   // Re-activate customer state
   bool isReactivatingCustomer = false;
 
-  /// Update customer is_active status
-  /// GET: api/update_cutomer_is_active_status?customer_id=<id>&status=<status>
-  Future<bool> updateCustomerIsActiveStatus(int customerId, int status) async {
+  /// POST: api/mobile/update_customer_is_active_status
+  Future<bool> updateCustomerIsActiveStatus({
+    required String imei1,
+    String? imei2,
+    required int isActive,
+  }) async {
     isReactivatingCustomer = true;
     notifyListeners();
 
@@ -2446,28 +2454,42 @@ class CustomerProvider with ChangeNotifier {
       final authToken = prefs.getString('auth_token') ?? '';
 
       final url = Uri.parse(
-        '${AppConstants.baseUrl}/update_cutomer_is_active_status?customer_id=$customerId&status=$status',
+        '${AppConstants.baseUrl}/mobile/update_customer_is_active_status',
       );
 
-      debugPrint('Update Customer IsActive Status URL: $url');
-
-      final headers = <String, String>{'Accept': 'application/json'};
+      final headers = <String, String>{
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
       if (authToken.isNotEmpty) {
         headers['Authorization'] = 'Bearer $authToken';
       }
 
-      final response = await http.get(url, headers: headers);
+      final body = <String, dynamic>{
+        'imei_1': imei1,
+        'imei_2': imei2 ?? '',
+        'is_active': isActive,
+      };
+
+      debugPrint('Update Customer IsActive Status URL: $url');
+      debugPrint('Update Customer IsActive Status Body: $body');
+
+      final response = await http.post(
+        url,
+        headers: headers,
+        body: json.encode(body),
+      );
 
       debugPrint(
         'Update IsActive Response: ${response.statusCode} ${response.body}',
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return true;
-      } else {
-        debugPrint('Update IsActive API error: ${response.statusCode}');
+      if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
         return false;
       }
+
+      return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       debugPrint('Error updating isActive status: $e');
       return false;
