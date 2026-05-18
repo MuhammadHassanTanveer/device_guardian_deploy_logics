@@ -3232,44 +3232,46 @@ IMEI: ${customer.imei1}
           // Location Card - shows when location is available
           _buildLocationCard(context, provider),
 
-          const SizedBox(height: Dimensions.paddingSizeLarge),
-
-          // Factory Reset Control Section
-          _buildSectionTitle(
-            context,
-            'Factory Reset Control',
-            'فیکٹری ری سیٹ کنٹرول',
-          ),
-          const SizedBox(height: Dimensions.paddingSizeExtraSmall),
-          Row(
-            children: [
-              Expanded(
-                child: _buildControlButton(
-                  context: context,
-                  provider: provider,
-                  label: 'Enable Factory Reset',
-                  urdulabel: 'فیکٹری ری سیٹ فعال کریں',
-                  icon: Icons.restore,
-                  color: Colors.green,
-                  command: 'enable_factory_reset',
-                  successMessage: 'Factory reset enabled successfully',
-                ),
-              ),
-              const SizedBox(width: Dimensions.paddingSizeExtraSmall),
-              Expanded(
-                child: _buildControlButton(
-                  context: context,
-                  provider: provider,
-                  label: 'Disable Factory Reset',
-                  urdulabel: 'فیکٹری ری سیٹ غیر فعال کریں',
-                  icon: Icons.block,
-                  color: Colors.red,
-                  command: 'disable_factory_reset',
-                  successMessage: 'Factory reset disabled successfully',
-                ),
-              ),
-            ],
-          ),
+          // const SizedBox(height: Dimensions.paddingSizeLarge),
+          //
+          // // Factory Reset Control Section
+          // _buildSectionTitle(
+          //   context,
+          //   'Factory Reset Control',
+          //   'فیکٹری ری سیٹ کنٹرول',
+          // ),
+          // const SizedBox(height: Dimensions.paddingSizeExtraSmall),
+          // Row(
+          //   children: [
+          //     Expanded(
+          //       child: _buildControlButton(
+          //         context: context,
+          //         provider: provider,
+          //         label: 'Enable Factory Reset',
+          //         urdulabel: 'فیکٹری ری سیٹ فعال کریں',
+          //         icon: Icons.restore,
+          //         color: Colors.green,
+          //         command: 'enable_factory_reset',
+          //         successMessage: 'Factory reset enabled successfully',
+          //       ),
+          //     ),
+          //     const SizedBox(width: Dimensions.paddingSizeExtraSmall),
+          //     Expanded(
+          //       child: _buildControlButton(
+          //         context: context,
+          //         provider: provider,
+          //         label: 'Disable Factory Reset',
+          //         urdulabel: 'فیکٹری ری سیٹ غیر فعال کریں',
+          //         icon: Icons.block,
+          //         color: Colors.red,
+          //         command: 'disable_factory_reset',
+          //         successMessage: 'Factory reset disabled successfully',
+          //       ),
+          //     ),
+          //   ],
+          // ),
+          //
+          // const SizedBox(height: Dimensions.paddingSizeLarge),
 
           const SizedBox(height: Dimensions.paddingSizeLarge),
 
