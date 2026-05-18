@@ -193,6 +193,51 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     _checkAndPrintStoredPin();
   }
 
+  /// Refresh customer data without clearing existing UI (pull-to-refresh).
+  Future<void> _refreshCustomerData() async {
+    if (!mounted) return;
+    final provider = context.read<CustomerProvider>();
+
+    await Future.wait([
+      provider.getSingleCustomer(context, widget.customerId),
+      provider.fetchSingleUserDevicesForCustomer(widget.customerId),
+      provider.fetchCustomerEmi(widget.customerId),
+      provider.fetchSimDetails(widget.customerId),
+    ]);
+
+    if (!mounted) return;
+
+    final customer = provider.singleCustomer;
+    if (customer != null) {
+      await provider.fetchLocationDataForCustomer(
+        customer.country,
+        customer.state,
+      );
+    }
+  }
+
+  /// Wraps tab content so pull-to-refresh works even when content is short.
+  Widget _wrapWithPullToRefresh({
+    required Widget child,
+    EdgeInsetsGeometry? padding,
+  }) {
+    return RefreshIndicator(
+      onRefresh: _refreshCustomerData,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // Method to check PIN when tab changes
   void _onTabChanged() {
     if (_tabController.index == 2) {
@@ -2142,28 +2187,30 @@ IMEI: ${customer.imei1}
     final colorScheme = Theme.of(context).colorScheme;
 
     if (customer == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.person_off,
-              size: 64,
-              color: colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No customer data available',
-              style: robotoRegular(
-                context,
-              ).copyWith(color: colorScheme.onSurface.withValues(alpha: 0.7)),
-            ),
-          ],
+      return _wrapWithPullToRefresh(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.person_off,
+                size: 64,
+                color: colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No customer data available',
+                style: robotoRegular(context).copyWith(
+                  color: colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return SingleChildScrollView(
+    return _wrapWithPullToRefresh(
       padding: const EdgeInsets.all(12),
       child: _buildDetailsTabContent(context, provider),
     );
@@ -2885,12 +2932,11 @@ IMEI: ${customer.imei1}
 
     // If customer isActive is 2, show only re-activate button
     if (customer != null && customer.isActive == 2) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+      return _wrapWithPullToRefresh(
+        padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
               Icon(
                 Icons.app_blocking,
                 size: 80,
@@ -2958,13 +3004,12 @@ IMEI: ${customer.imei1}
                 ),
               ),
             ],
-          ),
         ),
       );
     }
 
     // Build your commands tab content here
-    return SingleChildScrollView(
+    return _wrapWithPullToRefresh(
       padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3301,34 +3346,40 @@ IMEI: ${customer.imei1}
     final canDeleteEmi = hasEmiRecord && paidEmis == 0;
 
     // Check if loading
-    if (provider.isEmiLoading) {
-      return const Center(child: CircularProgressIndicator());
+    if (provider.isEmiLoading && customerEmi == null && emiDetails.isEmpty) {
+      return _wrapWithPullToRefresh(
+        child: const Center(child: CircularProgressIndicator()),
+      );
     }
 
     // Check for errors
-    if (provider.emiError != null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: colorScheme.error),
-            const SizedBox(height: 16),
-            Text(
-              provider.emiError!,
-              style: robotoRegular(context).copyWith(color: colorScheme.error),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => provider.fetchCustomerEmi(widget.customerId),
-              child: const Text('Retry'),
-            ),
-          ],
+    if (provider.emiError != null &&
+        customerEmi == null &&
+        emiDetails.isEmpty) {
+      return _wrapWithPullToRefresh(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 48, color: colorScheme.error),
+              const SizedBox(height: 16),
+              Text(
+                provider.emiError!,
+                style: robotoRegular(context).copyWith(color: colorScheme.error),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => provider.fetchCustomerEmi(widget.customerId),
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return SingleChildScrollView(
+    return _wrapWithPullToRefresh(
       padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
       child: Column(
         children: [
