@@ -2934,9 +2934,12 @@ IMEI: ${customer.imei1}
     if (customer != null && customer.isActive == 2) {
       return _wrapWithPullToRefresh(
         padding: const EdgeInsets.all(Dimensions.paddingSizeDefault),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
+        child: SizedBox(
+          width: double.infinity,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
               Icon(
                 Icons.app_blocking,
                 size: 80,
@@ -2945,6 +2948,7 @@ IMEI: ${customer.imei1}
               const SizedBox(height: 24),
               Text(
                 'App Uninstalled',
+                textAlign: TextAlign.center,
                 style: robotoBold(context).copyWith(
                   fontSize: Dimensions.fontSizeOverLarge(context),
                   color: Colors.red,
@@ -2953,6 +2957,7 @@ IMEI: ${customer.imei1}
               const SizedBox(height: 8),
               Text(
                 'ایپ ان انسٹال ہو گئی ہے',
+                textAlign: TextAlign.center,
                 style: robotoRegular(context).copyWith(
                   fontSize: Dimensions.fontSizeLarge(context),
                   color: Colors.red.withValues(alpha: 0.8),
@@ -2998,12 +3003,14 @@ IMEI: ${customer.imei1}
               const SizedBox(height: 12),
               Text(
                 'دوبارہ فعال کریں',
+                textAlign: TextAlign.center,
                 style: robotoRegular(context).copyWith(
                   fontSize: Dimensions.fontSizeDefault(context),
                   color: colorScheme.onSurface.withValues(alpha: 0.7),
                 ),
               ),
             ],
+          ),
         ),
       );
     }
