@@ -16,6 +16,7 @@ class HomeProvider with ChangeNotifier {
   
   // App Version related
   AppVersionModel? _appVersionData;
+  CreatedByUserModel? _createdByUser;
   bool _isVersionOutdated = false;
   String _downloadUrl = '';
 
@@ -27,6 +28,7 @@ class HomeProvider with ChangeNotifier {
   
   // App Version Getters
   AppVersionModel? get appVersionData => _appVersionData;
+  CreatedByUserModel? get createdByUser => _createdByUser;
   bool get isVersionOutdated => _isVersionOutdated;
   String get downloadUrl => _downloadUrl;
 
@@ -193,6 +195,13 @@ class HomeProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('auth_token') ?? '';
 
+      if (token.isEmpty) {
+        debugPrint("App Version fetch skipped: auth token is empty");
+        _isVersionOutdated = false;
+        notifyListeners();
+        return false;
+      }
+
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/app-info'),
         headers: {
@@ -205,31 +214,25 @@ class HomeProvider with ChangeNotifier {
       debugPrint("App Version API Response: ${response.body}");
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        final appInfo = AppInfoResponseModel.fromJson(data);
 
-        // Handle both 'success' and 'status' fields
-        if (data['success'] == true || data['status'] == true) {
-          // Try different possible response structures
-          final versionData = data['data'] ?? data['Data'] ?? data['app_info'] ?? data;
+        if (appInfo.status && appInfo.data != null) {
+          _appVersionData = appInfo.data;
+          _createdByUser = appInfo.createdByUser;
+          _downloadUrl = _appVersionData?.appDownloadUrl ?? '';
 
-          if (versionData != null) {
-            _appVersionData = AppVersionModel.fromJson(versionData);
-            _downloadUrl = _appVersionData?.appDownloadUrl ?? '';
-            
-            // Compare versions
-            final serverVersion = _appVersionData?.appVersion ?? '';
-            final localVersion = AppConstants.appVersion;
-            
-            debugPrint("Server Version: $serverVersion");
-            debugPrint("Local Version: $localVersion");
-            
-            // Check if version is outdated
-            _isVersionOutdated = serverVersion.isNotEmpty && 
-                                 serverVersion != localVersion;
-            
-            notifyListeners();
-            return _isVersionOutdated;
-          }
+          final serverVersion = _appVersionData?.appVersion ?? '';
+          final localVersion = AppConstants.appVersion;
+
+          debugPrint("Server Version: $serverVersion");
+          debugPrint("Local Version: $localVersion");
+
+          _isVersionOutdated =
+              serverVersion.isNotEmpty && serverVersion != localVersion;
+
+          notifyListeners();
+          return _isVersionOutdated;
         }
       } else if (response.statusCode == 401) {
         await SessionManager.handleSessionExpiry(response.statusCode);
@@ -370,6 +373,7 @@ class HomeProvider with ChangeNotifier {
     _errorMessage = null;
     _isLoading = false;
     _appVersionData = null;
+    _createdByUser = null;
     _isVersionOutdated = false;
     _downloadUrl = '';
     notifyListeners();

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../widgets/snack_bar_widget.dart';
 
+import '../models/app_version_model.dart';
 import '../providers/home_provider.dart';
 import '../util/dimensions.dart';
 import '../util/styles.dart';
@@ -66,7 +67,8 @@ class HelpSupportScreen extends StatelessWidget {
                   child: Consumer<HomeProvider>(
                     builder: (context, homeProvider, child) {
                       final appVersionData = homeProvider.appVersionData;
-                      
+                      final createdByUser = homeProvider.createdByUser;
+
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -139,8 +141,14 @@ class HelpSupportScreen extends StatelessWidget {
                             onTap: () => _sendEmail(context, appVersionData?.email ?? ''),
                             onCopy: () => _copyToClipboard(context, appVersionData?.email ?? ''),
                           ),
+
+                          if (createdByUser != null) ...[
+                            const SizedBox(height: Dimensions.paddingSizeLarge),
+                            _buildCreatedByUserCard(context, createdByUser),
+                          ],
+
                           const SizedBox(height: Dimensions.paddingSizeLarge),
-                          
+
                           // Quick Actions
                           Text(
                             "Quick Actions",
@@ -194,6 +202,161 @@ class HelpSupportScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCreatedByUserCard(
+    BuildContext context,
+    CreatedByUserModel createdByUser,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final phoneNumber = createdByUser.contactNumber;
+    final companyNameUrdu = createdByUser.companyNameUrdu?.trim() ?? '';
+
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+      ),
+      child: Padding(
+        padding: EdgeInsets.all(Dimensions.paddingSizeDefault),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(Dimensions.paddingSizeSmall),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius:
+                        BorderRadius.circular(Dimensions.radiusDefault),
+                  ),
+                  child: Icon(
+                    Icons.business,
+                    size: 28,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: Dimensions.paddingSizeDefault),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Created By",
+                        style: robotoBold(context).copyWith(
+                          fontSize: Dimensions.fontSizeDefault(context),
+                          color: colorScheme.tertiary,
+                        ),
+                      ),
+                      Text(
+                        "(تخلیق کنندہ)",
+                        style: robotoRegular(context).copyWith(
+                          fontSize: Dimensions.fontSizeSmall(context),
+                          color: theme.hintColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Dimensions.paddingSizeDefault),
+            _buildCreatedByInfoRow(
+              context,
+              label: "Company Name",
+              urduLabel: "کمپنی کا نام",
+              value: createdByUser.companyName,
+            ),
+            if (companyNameUrdu.isNotEmpty) ...[
+              const SizedBox(height: Dimensions.paddingSizeSmall),
+              _buildCreatedByInfoRow(
+                context,
+                label: "Company Name (Urdu)",
+                urduLabel: "کمپنی کا نام (اردو)",
+                value: companyNameUrdu,
+              ),
+            ],
+            const SizedBox(height: Dimensions.paddingSizeSmall),
+            InkWell(
+              onTap: () => _makePhoneCall(context, phoneNumber),
+              borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildCreatedByInfoRow(
+                        context,
+                        label: "Phone Number",
+                        urduLabel: "فون نمبر",
+                        value: phoneNumber.isNotEmpty ? phoneNumber : 'N/A',
+                      ),
+                    ),
+                    if (phoneNumber.isNotEmpty)
+                      IconButton(
+                        onPressed: () =>
+                            _copyToClipboard(context, phoneNumber),
+                        icon: Icon(
+                          Icons.copy,
+                          size: 20,
+                          color: theme.hintColor,
+                        ),
+                        tooltip: 'Copy',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCreatedByInfoRow(
+    BuildContext context, {
+    required String label,
+    required String urduLabel,
+    required String value,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: robotoBold(context).copyWith(
+                fontSize: Dimensions.fontSizeSmall(context),
+                color: colorScheme.tertiary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              "($urduLabel)",
+              style: robotoRegular(context).copyWith(
+                fontSize: Dimensions.fontSizeExtraSmall(context),
+                color: theme.hintColor,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value.isNotEmpty ? value : 'N/A',
+          style: robotoRegular(context).copyWith(
+            fontSize: Dimensions.fontSizeDefault(context),
+            color: colorScheme.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
     );
   }
 
