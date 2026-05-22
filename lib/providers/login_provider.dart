@@ -115,7 +115,9 @@ class LoginProvider with ChangeNotifier {
 
   Future<bool> checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool('is_logged_in') ?? false;
+    final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+    final token = prefs.getString('auth_token') ?? '';
+    return isLoggedIn && token.isNotEmpty;
   }
 
   /// Load user data from SharedPreferences (useful when app restarts)

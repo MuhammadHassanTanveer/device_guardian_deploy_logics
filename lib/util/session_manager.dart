@@ -14,6 +14,14 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 class SessionManager {
   static bool _isHandlingSessionExpiry = false;
 
+  /// Whether local auth credentials are still present (not cleared by logout/expiry).
+  static Future<bool> isSessionActive() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isLoggedIn = prefs.getBool('is_logged_in') ?? false;
+    final token = prefs.getString('auth_token') ?? '';
+    return isLoggedIn && token.isNotEmpty;
+  }
+
   /// Check if response indicates session expiration (401 Unauthorized)
   static bool isSessionExpired(int statusCode) {
     return statusCode == 401;
@@ -115,28 +123,32 @@ class SessionManager {
     debugPrint('Navigating to login screen...');
 
     final navigator = navigatorKey.currentState;
-    if (navigator != null) {
-      // Show session expired message
-      final context = navigatorKey.currentContext;
-      if (context != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Session expired. Please login again.\nسیشن ختم ہو گیا۔ براہ کرم دوبارہ لاگ ان کریں۔'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-
-      // Navigate to login screen and remove all previous routes
-      navigator.pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-      debugPrint('Navigation to login screen completed');
-    } else {
+    if (navigator == null) {
       debugPrint('Navigator key is null, cannot navigate');
+      return;
     }
+
+    // Navigate first so splash/home cannot push another route on top of login.
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
+    );
+    debugPrint('Navigation to login screen completed');
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = navigatorKey.currentContext;
+      if (context == null) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Session expired. Please login again.\nسیشن ختم ہو گیا۔ براہ کرم دوبارہ لاگ ان کریں۔',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    });
   }
 
   /// Standard error response for session expiration

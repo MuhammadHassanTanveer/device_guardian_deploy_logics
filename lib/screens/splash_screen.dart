@@ -1,6 +1,7 @@
 import 'package:deviceguardianadmin/providers/home_provider.dart';
 import 'package:deviceguardianadmin/providers/login_provider.dart';
 import 'package:deviceguardianadmin/util/app_constants.dart';
+import 'package:deviceguardianadmin/util/session_manager.dart';
 import 'package:deviceguardianadmin/util/styles.dart';
 import 'package:deviceguardianadmin/widgets/guardian_loading_animation.dart';
 import 'package:flutter/material.dart';
@@ -26,69 +27,73 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _checkLoginStatus() async {
     await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
 
-    if (mounted) {
-      final provider = context.read<LoginProvider>();
-      final isLoggedIn = await provider.checkLoginStatus();
+    final loginProvider = context.read<LoginProvider>();
+    final homeProvider = context.read<HomeProvider>();
 
-      if (mounted) {
-        if (!isLoggedIn) {
-          // Not logged in, go to login screen
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-            (route) => false,
-          );
-        } else {
-          // Already logged in, pre-fetch app version for the home screen
-          // This ensures version check happens early
-          await context.read<HomeProvider>().getAppVersion();
-          
-          // First check if PIN is already stored locally
-          final storedPin = await provider.getStoredPinCode();
-
-          if (!mounted) return;
-
-          if (storedPin != null && storedPin.isNotEmpty) {
-            // Has stored PIN locally, go directly to home
-            debugPrint("PIN found in SharedPreferences, going to home");
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
-              (route) => false,
-            );
-          } else {
-            // No local PIN, check API
-            debugPrint("No local PIN, checking API...");
-            final pinCode = await provider.getPinCode();
-
-            if (!mounted) return;
-
-            if (pinCode != null && pinCode.isNotEmpty) {
-              // API returned a PIN code (already stored by getPinCode), go to home
-              debugPrint("PIN found from API, going to home");
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-                (route) => false,
-              );
-            } else if (pinCode != null && pinCode.isEmpty) {
-              // API explicitly says PIN is not set, show update PIN screen
-              debugPrint("API says PIN not set, showing Update PIN screen");
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
-                (route) => false,
-              );
-            } else {
-              // API call failed (pinCode == null), go to home anyway
-              // Don't force PIN setup if API fails
-              debugPrint("API call failed, going to home anyway");
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (context) => const HomeScreen()),
-                (route) => false,
-              );
-            }
-          }
-        }
-      }
+    if (!await loginProvider.checkLoginStatus()) {
+      _navigateToLogin();
+      return;
     }
+
+    // Validate token with server before leaving splash (may trigger session expiry).
+    await homeProvider.getAppVersion();
+    if (!mounted || !await SessionManager.isSessionActive()) {
+      return;
+    }
+
+    final storedPin = await loginProvider.getStoredPinCode();
+    if (!mounted || !await SessionManager.isSessionActive()) {
+      return;
+    }
+
+    if (storedPin != null && storedPin.isNotEmpty) {
+      debugPrint('PIN found in SharedPreferences, going to home');
+      _navigateToHome();
+      return;
+    }
+
+    debugPrint('No local PIN, checking API...');
+    final pinCode = await loginProvider.getPinCode();
+    if (!mounted || !await SessionManager.isSessionActive()) {
+      return;
+    }
+
+    if (pinCode != null && pinCode.isNotEmpty) {
+      debugPrint('PIN found from API, going to home');
+      _navigateToHome();
+    } else if (pinCode != null && pinCode.isEmpty) {
+      debugPrint('API says PIN not set, showing Update PIN screen');
+      _navigateToUpdatePin();
+    } else {
+      debugPrint('PIN API failed (network), going to home');
+      _navigateToHome();
+    }
+  }
+
+  void _navigateToLogin() {
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (route) => false,
+    );
+  }
+
+  void _navigateToHome() {
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+      (route) => false,
+    );
+  }
+
+  void _navigateToUpdatePin() {
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
+      (route) => false,
+    );
   }
 
 
