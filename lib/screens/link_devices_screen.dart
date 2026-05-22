@@ -122,17 +122,23 @@ class _LinkDevicesScreenState extends State<LinkDevicesScreen> {
     );
   }
 
-  IconData _deviceIcon(String deviceType) {
-    switch (deviceType.toLowerCase()) {
-      case 'ios':
-        return Icons.phone_iphone;
-      case 'android':
-        return Icons.phone_android;
-      case 'web':
-        return Icons.language;
-      default:
-        return Icons.devices_other;
+  IconData _deviceIcon(LoginSession session) {
+    final client = session.client.toLowerCase();
+    final type = session.deviceType.toLowerCase();
+
+    if (client == 'api_client' || type == 'api_client') {
+      return Icons.api;
     }
+    if (session.isWeb || client == 'web' || type == 'web') {
+      return Icons.language;
+    }
+    if (session.isMobileApp || client == 'android' || type == 'android') {
+      return Icons.phone_android;
+    }
+    if (client == 'ios' || type == 'ios') {
+      return Icons.phone_iphone;
+    }
+    return Icons.devices_other;
   }
 
   String _formatDateTime(String? iso) {
@@ -279,7 +285,7 @@ class _LinkDevicesScreenState extends State<LinkDevicesScreen> {
         else
           ...sessions.map((session) => _SessionCard(
                 session: session,
-                deviceIcon: _deviceIcon(session.deviceType),
+                deviceIcon: _deviceIcon(session),
                 lastUsedLabel: _formatDateTime(session.lastUsedAt),
                 isActionLoading: provider.isActionLoading,
                 onRemove: () => _handleLogoutSession(session),
@@ -394,13 +400,33 @@ class _SessionCard extends StatelessWidget {
                             ),
                         ],
                       ),
-                      if (session.deviceType.isNotEmpty) ...[
+                      if (session.displaySubtitle.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
-                          session.deviceType.toUpperCase(),
+                          session.displaySubtitle,
                           style: robotoRegular(context).copyWith(
                             fontSize: Dimensions.fontSizeSmall(context),
                             color: theme.hintColor,
+                          ),
+                        ),
+                      ],
+                      if (!session.isActive) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colorScheme.error.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Inactive',
+                            style: robotoMedium(context).copyWith(
+                              fontSize: 11,
+                              color: colorScheme.error,
+                            ),
                           ),
                         ),
                       ],
