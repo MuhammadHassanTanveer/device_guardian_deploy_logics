@@ -14,5 +14,5 @@ class AppConstants {
   static const double maxImageSend = 10;
 
   // App Version - Update this when releasing a new version
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
 }

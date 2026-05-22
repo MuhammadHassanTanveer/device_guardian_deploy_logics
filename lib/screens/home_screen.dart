@@ -22,6 +22,7 @@ import 'add_customer_screen.dart';
 import 'customer_list.dart';
 import 'help_support_screen.dart';
 import 'login_screen.dart';
+import 'change_password_screen.dart';
 import 'profile_screen.dart';
 import 'purchase_history_screen.dart';
 import 'update_pin_screen.dart';
@@ -1286,6 +1287,56 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(height: 4),
                             Text(
                               "پروفائل",
+                              style: robotoRegular(context).copyWith(
+                                fontSize: Dimensions.fontSizeSmall(context),
+                                color: theme.hintColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.arrow_forward_ios, size: 18, color: theme.hintColor),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: Dimensions.paddingSizeSmall),
+              // Change Password Tile
+              InkWell(
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const ChangePasswordScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: EdgeInsets.all(Dimensions.paddingSizeDefault),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+                    border: Border.all(color: theme.dividerColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.password_rounded, size: 28, color: colorScheme.primary),
+                      const SizedBox(width: Dimensions.paddingSizeDefault),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Change Password",
+                              style: robotoBold(context).copyWith(
+                                fontSize: Dimensions.fontSizeLarge(context),
+                                color: colorScheme.tertiary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "پاس ورڈ تبدیل کریں",
                               style: robotoRegular(context).copyWith(
                                 fontSize: Dimensions.fontSizeSmall(context),
                                 color: theme.hintColor,

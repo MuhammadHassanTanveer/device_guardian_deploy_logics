@@ -1,4 +1,5 @@
 
+import 'package:deviceguardianadmin/providers/change_password_provider.dart';
 import 'package:deviceguardianadmin/providers/customer_provider.dart';
 import 'package:deviceguardianadmin/providers/home_provider.dart';
 import 'package:deviceguardianadmin/providers/login_provider.dart';
@@ -58,6 +59,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (ctx) => CustomerProvider(),),
         ChangeNotifierProvider(create: (ctx) => LoginProvider(),),
         ChangeNotifierProvider(create: (ctx) => ProfileProvider(),),
+        ChangeNotifierProvider(create: (ctx) => ChangePasswordProvider(),),
         ChangeNotifierProvider(create: (ctx) => HomeProvider(),),
         ChangeNotifierProvider(create: (ctx) => RegistrationProvider(),),
         ChangeNotifierProvider(create: (ctx) => PurchaseHistoryProvider(),),
