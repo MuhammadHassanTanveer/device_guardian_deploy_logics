@@ -94,6 +94,7 @@ class LoginUserData {
   final int userId;
   final String email;
   final String token;
+  final int tokenId;
   final String uuid;
   final String name;
   final String avatar;
@@ -113,6 +114,7 @@ class LoginUserData {
     required this.userId,
     required this.email,
     required this.token,
+    this.tokenId = 0,
     required this.uuid,
     required this.name,
     required this.avatar,
@@ -130,24 +132,30 @@ class LoginUserData {
   });
 
   factory LoginUserData.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic> userJson = json;
+    if (json['user'] is Map<String, dynamic>) {
+      userJson = Map<String, dynamic>.from(json['user'] as Map<String, dynamic>);
+    }
+
     return LoginUserData(
-      userId: _parseInt(json['user_id']),
-      email: json['email']?.toString() ?? '',
-      token: json['token']?.toString() ?? '',
-      uuid: json['uuid']?.toString() ?? '',
-      name: json['name']?.toString() ?? '',
-      avatar: json['avatar']?.toString() ?? '',
-      role: json['role']?.toString() ?? '',
-      phone: json['phone']?.toString() ?? '',
-      address: json['address']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
-      city: LocationInfo.fromJson(json['city']),
-      state: LocationInfo.fromJson(json['state']),
-      country: LocationInfo.fromJson(json['country']),
-      type: json['type']?.toString() ?? '',
-      nameUrdu: json['name_urdu']?.toString() ?? '',
-      longitude: json['longitude']?.toString() ?? '',
-      latitude: json['latitude']?.toString() ?? '',
+      userId: _parseInt(userJson['user_id'] ?? userJson['id']),
+      email: userJson['email']?.toString() ?? '',
+      token: json['token']?.toString() ?? userJson['token']?.toString() ?? '',
+      tokenId: _parseInt(json['token_id']),
+      uuid: userJson['uuid']?.toString() ?? '',
+      name: userJson['name']?.toString() ?? '',
+      avatar: userJson['avatar']?.toString() ?? '',
+      role: userJson['role']?.toString() ?? '',
+      phone: userJson['phone']?.toString() ?? '',
+      address: userJson['address']?.toString() ?? '',
+      status: userJson['status']?.toString() ?? '',
+      city: LocationInfo.fromJson(userJson['city']),
+      state: LocationInfo.fromJson(userJson['state']),
+      country: LocationInfo.fromJson(userJson['country']),
+      type: userJson['type']?.toString() ?? '',
+      nameUrdu: userJson['name_urdu']?.toString() ?? '',
+      longitude: userJson['longitude']?.toString() ?? '',
+      latitude: userJson['latitude']?.toString() ?? '',
     );
   }
 
@@ -156,6 +164,7 @@ class LoginUserData {
       'user_id': userId,
       'email': email,
       'token': token,
+      'token_id': tokenId,
       'uuid': uuid,
       'name': name,
       'avatar': avatar,

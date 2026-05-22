@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../models/login_model.dart';
 import '../util/app_constants.dart';
+import '../util/device_info_util.dart';
 import '../util/session_manager.dart';
 
 class LoginProvider with ChangeNotifier {
@@ -27,6 +28,8 @@ class LoginProvider with ChangeNotifier {
         body: jsonEncode({
           'email': email,
           'password': password,
+          'device_name': DeviceInfoUtil.deviceName,
+          'device_type': DeviceInfoUtil.deviceType,
         }),
       );
 
@@ -47,6 +50,9 @@ class LoginProvider with ChangeNotifier {
           // Store in SharedPreferences
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('auth_token', _userData!.token);
+          if (_userData!.tokenId > 0) {
+            await prefs.setInt('token_id', _userData!.tokenId);
+          }
           await prefs.setString('user_id', _userData!.userId.toString());
           await prefs.setBool('is_logged_in', true);
           
