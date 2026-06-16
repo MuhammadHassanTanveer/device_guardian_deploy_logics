@@ -219,6 +219,7 @@ class Datum {
   final String model;
   final String imei1;
   final String? imei2;
+  final String imeiType;
   final String deviceStatus;
   final String status;
   final String lockCode;
@@ -241,6 +242,7 @@ class Datum {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final int isActive;
+  final bool firstActiveStatus;
   final bool lockStatus; // New field from API
   final bool actualLockStatus; // Actual lock status from device
   final String serialNo;
@@ -285,6 +287,7 @@ class Datum {
     required this.model,
     required this.imei1,
     this.imei2,
+    this.imeiType = '',
     required this.deviceStatus,
     required this.status,
     required this.lockCode,
@@ -307,6 +310,7 @@ class Datum {
     required this.createdAt,
     this.updatedAt,
     required this.isActive,
+    this.firstActiveStatus = false,
     required this.lockStatus,
     required this.actualLockStatus,
     required this.serialNo,
@@ -330,6 +334,11 @@ class Datum {
     required this.profileImage,
     this.mobileImages = const [], // Default to empty list
   });
+
+  bool get isDualImeiDevice {
+    if (imeiType.toLowerCase() == 'double') return true;
+    return imei2 != null && imei2!.trim().isNotEmpty;
+  }
 
   factory Datum.fromJson(Map<String, dynamic> json) {
     // Parse country - can be int, String, or Map with id/name
@@ -441,8 +450,9 @@ class Datum {
       googleMap: json["google_map"],
       loanBy: json["loan_by"],
       model: json["model"] ?? '',
-      imei1: json["imei_1"] ?? '',
-      imei2: json["imei_2"],
+      imei1: json["imei_1"]?.toString() ?? '',
+      imei2: _parseNullableString(json["imei_2"]),
+      imeiType: json["imei_type"]?.toString() ?? '',
       deviceStatus: json["device_status"] ?? '',
       status: json["status"] ?? '',
       lockCode: _parseString(json["lock_code"]),
@@ -471,6 +481,7 @@ class Datum {
           ? DateTime.parse(json["updated_at"])
           : null,
       isActive: _parseIsActive(json["is_active"]),
+      firstActiveStatus: _parseFirstActiveStatus(json),
       lockStatus: lockStatusValue,
       actualLockStatus: actualLockStatusValue,
       serialNo: json["serial_no"] ?? '',
@@ -507,6 +518,37 @@ class Datum {
       return 0;
     }
     return 0;
+  }
+
+  static bool _parseBoolField(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    if (value is String) {
+      final parsed = value.toLowerCase().trim();
+      return parsed == 'true' ||
+          parsed == '1' ||
+          parsed == 'yes' ||
+          parsed == 'on';
+    }
+    return false;
+  }
+
+  static bool _parseFirstActiveStatus(Map<String, dynamic> json) {
+    const keys = [
+      'first_active_status',
+      'firstActiveStatus',
+      'is_first_active',
+      'first_active',
+    ];
+
+    for (final key in keys) {
+      if (json.containsKey(key)) {
+        return _parseBoolField(json[key]);
+      }
+    }
+
+    return false;
   }
 
   static String _parseString(dynamic value) {
@@ -623,6 +665,7 @@ class Datum {
     String? model,
     String? imei1,
     String? imei2,
+    String? imeiType,
     String? deviceStatus,
     String? status,
     String? lockCode,
@@ -645,6 +688,7 @@ class Datum {
     DateTime? createdAt,
     DateTime? updatedAt,
     int? isActive,
+    bool? firstActiveStatus,
     bool? lockStatus,
     bool? actualLockStatus,
     String? serialNo,
@@ -688,6 +732,7 @@ class Datum {
       model: model ?? this.model,
       imei1: imei1 ?? this.imei1,
       imei2: imei2 ?? this.imei2,
+      imeiType: imeiType ?? this.imeiType,
       deviceStatus: deviceStatus ?? this.deviceStatus,
       status: status ?? this.status,
       lockCode: lockCode ?? this.lockCode,
@@ -710,6 +755,7 @@ class Datum {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isActive: isActive ?? this.isActive,
+      firstActiveStatus: firstActiveStatus ?? this.firstActiveStatus,
       lockStatus: lockStatus ?? this.lockStatus,
       actualLockStatus: actualLockStatus ?? this.actualLockStatus,
       serialNo: serialNo ?? this.serialNo,

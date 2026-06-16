@@ -18,6 +18,7 @@ import '../util/app_constants.dart';
 import '../util/dimensions.dart';
 import '../util/styles.dart';
 import '../widgets/custom_text_field_widget.dart';
+import '../widgets/device_location_map_widget.dart';
 
 // Social App Model
 class SocialApp {
@@ -180,6 +181,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       ), // Fetch SIM details on screen open
     ]);
 
+    await provider.fetchEmiLockDates(widget.customerId);
+    await provider.applyEmiAutoLockIfNeeded(widget.customerId);
+
     // Fetch location data (country, state, city names) after customer is loaded
     final customer = provider.singleCustomer;
     if (customer != null) {
@@ -204,6 +208,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       provider.fetchCustomerEmi(widget.customerId),
       provider.fetchSimDetails(widget.customerId),
     ]);
+
+    await provider.fetchEmiLockDates(widget.customerId);
+    await provider.applyEmiAutoLockIfNeeded(widget.customerId);
 
     if (!mounted) return;
 
@@ -636,6 +643,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       if (result['success'] == true) {
         // Refresh EMI data after successful addition
         await customerProvider.fetchCustomerEmi(customerId);
+        await customerProvider.applyEmiAutoLockIfNeeded(customerId);
 
         showCustomSnackBar(
           context,
@@ -643,6 +651,9 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
           isError: result['isWarning'] == true,
         );
       } else if (result['error'] != null) {
+        if (result['hasActiveEmi'] == true) {
+          await customerProvider.fetchCustomerEmi(customerId);
+        }
         showCustomSnackBar(context, result['error'], isError: true);
       }
     }
@@ -1182,15 +1193,39 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       return;
     }
 
-    final success = await provider.updateCustomerIsActiveStatus(
-      imei1: customer.imei1,
-      imei2: customer.imei2,
+    final resolvedImeis = provider.resolveImeisForDeviceApi(customer);
+
+    if (resolvedImeis.imei1.isEmpty) {
+      if (!mounted) return;
+      showCustomSnackBar(
+        context,
+        'Customer IMEI is not available',
+        isError: true,
+      );
+      return;
+    }
+
+    if (customer.isDualImeiDevice &&
+        (resolvedImeis.imei2 == null || resolvedImeis.imei2!.isEmpty)) {
+      if (!mounted) return;
+      showCustomSnackBar(
+        context,
+        'Both IMEI numbers are required for dual IMEI devices',
+        isError: true,
+      );
+      return;
+    }
+
+    final result = await provider.updateCustomerIsActiveStatus(
+      imei1: resolvedImeis.imei1,
+      imei2: resolvedImeis.imei2,
+      imeiType: resolvedImeis.imeiType,
       isActive: 0,
     );
 
     if (!mounted) return;
 
-    if (success) {
+    if (result['success'] == true) {
       await provider.fetchCustomers(context, isRefresh: true);
 
       if (!mounted) return;
@@ -1205,7 +1240,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     } else {
       showCustomSnackBar(
         context,
-        'Failed to re-activate customer',
+        result['error'] ?? 'Failed to re-activate customer',
         isError: true,
       );
     }
@@ -1220,25 +1255,27 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      body: Stack(
-        children: [
-          isLoading
-              ? Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        colorScheme.surface,
-                        colorScheme.tertiaryContainer,
-                      ],
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            isLoading
+                ? Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          colorScheme.surface,
+                          colorScheme.tertiaryContainer,
+                        ],
+                      ),
                     ),
-                  ),
-                  child: const Center(child: CircularProgressIndicator()),
-                )
-              : Screenshot(
-                  controller: _screenshotController,
-                  child: NestedScrollView(
+                    child: const Center(child: CircularProgressIndicator()),
+                  )
+                : Screenshot(
+                    controller: _screenshotController,
+                    child: NestedScrollView(
                 headerSliverBuilder: (context, innerBoxIsScrolled) {
                   return [
                     SliverAppBar(
@@ -1540,12 +1577,13 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
                 ),
               ),
             ),
-          if (provider.isRefreshingSingleCustomer)
-            Container(
-              color: Colors.black.withValues(alpha: 0.35),
-              child: const Center(child: CircularProgressIndicator()),
-            ),
-        ],
+            if (provider.isRefreshingSingleCustomer)
+              Container(
+                color: Colors.black.withValues(alpha: 0.35),
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -3351,6 +3389,8 @@ IMEI: ${customer.imei1}
     final remainingEmis = emiDetails.where((e) => !e.isPaidStatus).length;
     final hasEmiRecord = customerEmi != null || emiDetails.isNotEmpty;
     final canDeleteEmi = hasEmiRecord && paidEmis == 0;
+    final startMonth =
+        customerEmi?.startMonth ?? provider.emiLockDatesModel?.data?.startMonth;
 
     // Check if loading
     if (provider.isEmiLoading && customerEmi == null && emiDetails.isEmpty) {
@@ -3541,6 +3581,105 @@ IMEI: ${customer.imei1}
                       colorScheme: colorScheme,
                     ),
                   ],
+                  if (customerEmi?.dueDay != null) ...[
+                    const SizedBox(height: 12),
+                    _buildEmiInfoRow(
+                      context: context,
+                      label: 'Installment Due Day',
+                      urduLabel: 'قسط کی تاریخ',
+                      value: '${customerEmi!.dueDay}/month',
+                      colorScheme: colorScheme,
+                    ),
+                  ],
+                  if (customerEmi?.lockDay != null) ...[
+                    const SizedBox(height: 12),
+                    _buildEmiInfoRow(
+                      context: context,
+                      label: 'Device Lock Day',
+                      urduLabel: 'لاک کی تاریخ',
+                      value: '${customerEmi!.lockDay}/month',
+                      colorScheme: colorScheme,
+                    ),
+                  ],
+                  if (startMonth != null) ...[
+                    const SizedBox(height: 12),
+                    _buildEmiInfoRow(
+                      context: context,
+                      label: 'Starting Month',
+                      urduLabel: 'شروع کا مہینہ',
+                      value: EmiScheduleHelper.monthName(startMonth),
+                      colorScheme: colorScheme,
+                    ),
+                  ],
+                  if (customerEmi != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'Auto Lock',
+                              style: robotoRegular(context).copyWith(
+                                fontSize: Dimensions.fontSizeDefault(context),
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'خودکار لاک',
+                              style: robotoRegular(context).copyWith(
+                                fontSize: Dimensions.fontSizeSmall(context),
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: customerEmi.isAutoLockEnabled
+                                ? Colors.orange.withValues(alpha: 0.15)
+                                : colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(
+                              Dimensions.radiusSmall,
+                            ),
+                            border: customerEmi.isAutoLockEnabled
+                                ? Border.all(color: Colors.orange)
+                                : null,
+                          ),
+                          child: Text(
+                            customerEmi.isAutoLockEnabled
+                                ? 'Enabled'
+                                : 'Disabled',
+                            style: robotoBold(context).copyWith(
+                              fontSize: Dimensions.fontSizeSmall(context),
+                              color: customerEmi.isAutoLockEnabled
+                                  ? Colors.orange
+                                  : colorScheme.onSurface.withValues(
+                                      alpha: 0.6,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  if (provider.emiLockDatesModel?.data != null) ...[
+                    const SizedBox(height: 12),
+                    _buildEmiLockStatusBanner(
+                      context,
+                      provider.emiLockDatesModel!.data!,
+                      colorScheme,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3621,12 +3760,26 @@ IMEI: ${customer.imei1}
                       physics: const NeverScrollableScrollPhysics(),
                       itemBuilder: (context, index) {
                         final emiDetail = emiDetails[index];
+                        final lockInstallments =
+                            provider.emiLockDatesModel?.data?.installments ??
+                            [];
+                        EmiLockInstallment? lockInfo;
+                        for (final installment in lockInstallments) {
+                          if (installment.detailId.toString() ==
+                              emiDetail.emiDtlId) {
+                            lockInfo = installment;
+                            break;
+                          }
+                        }
                         return _buildPaymentHistoryCard(
                           context,
                           colorScheme,
                           index,
                           emiDetail,
                           provider,
+                          shouldLockDevice:
+                              emiDetail.shouldLockDevice ||
+                              (lockInfo?.shouldLockDevice ?? false),
                         );
                       },
                       separatorBuilder: (context, index) => const SizedBox(
@@ -3641,6 +3794,86 @@ IMEI: ${customer.imei1}
         ],
       ),
     );
+  }
+
+  Widget _buildEmiLockStatusBanner(
+    BuildContext context,
+    EmiLockDatesData lockData,
+    ColorScheme colorScheme,
+  ) {
+    if (!lockData.enableAutoLock) {
+      return const SizedBox.shrink();
+    }
+
+    final shouldLock = lockData.deviceShouldBeLocked;
+    final color = shouldLock ? Colors.red : Colors.green;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            shouldLock ? Icons.lock : Icons.lock_open,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  shouldLock
+                      ? 'Device should be locked'
+                      : 'No EMI lock required',
+                  style: robotoBold(context).copyWith(
+                    fontSize: Dimensions.fontSizeSmall(context),
+                    color: color,
+                  ),
+                ),
+                Text(
+                  shouldLock
+                      ? 'Unpaid installment past lock date'
+                      : 'All installments up to date',
+                  style: robotoRegular(context).copyWith(
+                    fontSize: Dimensions.fontSizeExtraSmall(context),
+                    color: colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _emiStatusColor(String status) {
+    switch (status) {
+      case 'paid':
+        return Colors.green;
+      case 'overdue':
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  String _emiStatusLabel(String status) {
+    switch (status) {
+      case 'paid':
+        return 'Paid';
+      case 'overdue':
+        return 'Overdue';
+      default:
+        return 'Pending';
+    }
   }
 
   // Helper method to format date
@@ -3788,7 +4021,7 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 2,
                 child: Text(
-                  'EMI Date',
+                  'Due Date',
                   style: robotoBold(
                     context,
                   ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
@@ -3798,7 +4031,7 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 2,
                 child: Text(
-                  'Pay Date',
+                  'Lock Date',
                   style: robotoBold(
                     context,
                   ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
@@ -3808,7 +4041,7 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 1,
                 child: Text(
-                  'Mode',
+                  'Amount',
                   style: robotoBold(
                     context,
                   ).copyWith(fontSize: Dimensions.fontSizeDefault(context)),
@@ -3840,17 +4073,21 @@ IMEI: ${customer.imei1}
     ColorScheme colorScheme,
     int index,
     CustomerEmiDetail emiDetail,
-    CustomerProvider provider,
-  ) {
+    CustomerProvider provider, {
+    bool shouldLockDevice = false,
+  }) {
     final bool isPaid = emiDetail.isPaidStatus;
-    final Color statusColor = isPaid ? Colors.green : Colors.orange;
+    final String status = isPaid ? 'paid' : emiDetail.status;
+    final Color statusColor = _emiStatusColor(status);
 
     return Column(
       children: <Widget>[
         Container(
           padding: const EdgeInsets.all(Dimensions.paddingSizeSmall),
           decoration: BoxDecoration(
-            color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            color: shouldLockDevice
+                ? Colors.red.withValues(alpha: 0.08)
+                : colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -3858,7 +4095,9 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 2,
                 child: Text(
-                  _formatDate(emiDetail.emiDate),
+                  emiDetail.emiDate.isNotEmpty
+                      ? _formatDate(emiDetail.emiDate)
+                      : '-',
                   style: robotoRegular(context).copyWith(
                     fontSize: Dimensions.fontSizeSmall(context),
                     color: colorScheme.onSurface,
@@ -3869,12 +4108,14 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 2,
                 child: Text(
-                  emiDetail.hasValidPaymentDate
-                      ? _formatDate(emiDetail.paymentDate)
+                  emiDetail.lockDate.isNotEmpty
+                      ? _formatDate(emiDetail.lockDate)
                       : '-',
                   style: robotoRegular(context).copyWith(
                     fontSize: Dimensions.fontSizeSmall(context),
-                    color: colorScheme.onSurface,
+                    color: shouldLockDevice
+                        ? Colors.red
+                        : colorScheme.onSurface,
                   ),
                   textAlign: TextAlign.start,
                 ),
@@ -3882,9 +4123,7 @@ IMEI: ${customer.imei1}
               Expanded(
                 flex: 1,
                 child: Text(
-                  emiDetail.paymentMethod.isNotEmpty
-                      ? emiDetail.paymentMethod
-                      : '-',
+                  'Rs. ${emiDetail.monthlyAmountParsed.toStringAsFixed(0)}',
                   style: robotoRegular(context).copyWith(
                     fontSize: Dimensions.fontSizeSmall(context),
                     color: colorScheme.onSurface,
@@ -3909,7 +4148,7 @@ IMEI: ${customer.imei1}
                             ),
                           ),
                           child: Text(
-                            'Paid',
+                            _emiStatusLabel(status),
                             style: robotoBold(context).copyWith(
                               fontSize: Dimensions.fontSizeSmall(context),
                               color: statusColor,
@@ -3931,22 +4170,22 @@ IMEI: ${customer.imei1}
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withValues(alpha: 0.15),
+                              color: statusColor.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(
                                 Dimensions.radiusSmall,
                               ),
                               border: Border.all(
-                                color: Colors.orange,
+                                color: statusColor,
                                 width: 1,
                               ),
                             ),
                             child: Text(
-                              'Unpaid',
+                              _emiStatusLabel(status),
                               style: robotoBold(context).copyWith(
                                 fontSize: Dimensions.fontSizeExtraSmall(
                                   context,
                                 ),
-                                color: Colors.orange,
+                                color: statusColor,
                               ),
                               textAlign: TextAlign.center,
                             ),
@@ -4264,6 +4503,8 @@ IMEI: ${customer.imei1}
 
       // Refresh EMI data
       await provider.fetchCustomerEmi(widget.customerId);
+      await provider.applyEmiAutoLockIfNeeded(widget.customerId);
+      await provider.fetchEmiLockDates(widget.customerId);
     } else {
       showCustomSnackBar(
         context,
@@ -4862,7 +5103,7 @@ IMEI: ${customer.imei1}
     );
   }
 
-  // Location Card to display latitude and longitude
+  // Location Card to display device location on map
   Widget _buildLocationCard(BuildContext context, CustomerProvider provider) {
     // Only show if we have location data
     if (!provider.hasLocationResponse && provider.locationError == null) {
@@ -4941,81 +5182,11 @@ IMEI: ${customer.imei1}
                     fontSize: Dimensions.fontSizeDefault(context),
                   ),
                 ),
-              ] else ...[
-                // Latitude
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.north,
-                        color: Colors.teal,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Latitude',
-                          style: robotoRegular(context).copyWith(
-                            color: Colors.grey.shade600,
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                        ),
-                        Text(
-                          provider.currentLatitude?.toStringAsFixed(6) ?? '',
-                          style: robotoBold(context).copyWith(
-                            fontSize: Dimensions.fontSizeDefault(context),
-                            color: Colors.teal.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Longitude
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.east,
-                        color: Colors.teal,
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Longitude',
-                          style: robotoRegular(context).copyWith(
-                            color: Colors.grey.shade600,
-                            fontSize: Dimensions.fontSizeSmall(context),
-                          ),
-                        ),
-                        Text(
-                          provider.currentLongitude?.toStringAsFixed(6) ?? '',
-                          style: robotoBold(context).copyWith(
-                            fontSize: Dimensions.fontSizeDefault(context),
-                            color: Colors.teal.shade800,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+              ] else if (provider.currentLatitude != null &&
+                  provider.currentLongitude != null) ...[
+                DeviceLocationMapWidget(
+                  latitude: provider.currentLatitude!,
+                  longitude: provider.currentLongitude!,
                 ),
               ],
             ],
@@ -5221,8 +5392,21 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
   late final TextEditingController _advanceAmountController;
   late final TextEditingController _totalMonthsController;
 
+  int _dueDay = 1;
+  int _lockDay = 10;
+  int _startMonth = 1;
+  bool _enableAutoLock = true;
   bool _isLoading = false;
   bool _isDisposed = false;
+
+  static const List<int> _dayOptions = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+  ];
+
+  static const List<int> _monthOptions = [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+  ];
 
   @override
   void initState() {
@@ -5232,8 +5416,43 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     _advanceAmountController = TextEditingController();
     _totalMonthsController = TextEditingController();
 
-    // Set default purchase date to today
-    _purchaseDateController.text = DateTime.now().toString().split(' ')[0];
+    // Set default purchase date to today and suggest starting month
+    final today = DateTime.now();
+    _purchaseDateController.text = today.toString().split(' ')[0];
+    _dueDay = today.day;
+    _startMonth = EmiScheduleHelper.suggestStartMonth(today);
+  }
+
+  DateTime get _todayDate {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime? _parsePurchaseDate() {
+    try {
+      return DateTime.parse(_purchaseDateController.text);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _updateSuggestedStartMonth() {
+    final purchaseDate = _parsePurchaseDate();
+    if (purchaseDate != null) {
+      _startMonth = EmiScheduleHelper.suggestStartMonth(purchaseDate);
+    }
+  }
+
+  String? _firstInstallmentPreview() {
+    final purchaseDate = _parsePurchaseDate();
+    if (purchaseDate == null) return null;
+
+    final firstDue = EmiScheduleHelper.resolveFirstDueDate(
+      purchaseDate,
+      _startMonth,
+      _dueDay,
+    );
+    return EmiScheduleHelper.formatFirstDuePreview(firstDue);
   }
 
   @override
@@ -5247,15 +5466,18 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
   }
 
   Future<void> _selectDate() async {
+    final todayDate = _todayDate;
+    final initialDate = _parsePurchaseDate() ?? todayDate;
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(2020),
+      initialDate: initialDate.isBefore(todayDate) ? todayDate : initialDate,
+      firstDate: todayDate,
       lastDate: DateTime(2100),
     );
     if (picked != null && !_isDisposed && mounted) {
       setState(() {
         _purchaseDateController.text = picked.toString().split(' ')[0];
+        _updateSuggestedStartMonth();
       });
     }
   }
@@ -5273,9 +5495,13 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
       final result = await widget.customerProvider.insertCustomerEmi(
         customerId: widget.customerId,
         purchaseDate: _purchaseDateController.text,
+        dueDay: _dueDay,
+        lockDay: _lockDay,
+        startMonth: _startMonth,
         totalAmount: _totalAmountController.text,
         advanceAmount: _advanceAmountController.text,
         totalMonths: _totalMonthsController.text,
+        enableAutoLock: _enableAutoLock,
       );
 
       if (_isDisposed || !mounted) return;
@@ -5292,6 +5518,8 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
         Navigator.of(context).pop({
           'success': false,
           'error': result['error'] ?? 'Failed to add EMI details',
+          'hasActiveEmi': result['hasActiveEmi'] == true,
+          'fieldErrors': result['fieldErrors'],
         });
       }
     } catch (e) {
@@ -5347,6 +5575,7 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
     final textStyle = robotoRegular(
       context,
     ).copyWith(fontSize: Dimensions.fontSizeSmall(context));
+    final firstInstallmentPreview = _firstInstallmentPreview();
 
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -5470,6 +5699,140 @@ class _EmiDetailsDialogState extends State<_EmiDetailsDialog> {
                     }
                     return null;
                   },
+                ),
+                const SizedBox(height: 10),
+
+                // Installment Due Day
+                DropdownButtonFormField<int>(
+                  value: _dueDay,
+                  isExpanded: true,
+                  decoration: _compactInputDecoration(
+                    labelText: 'Installment Due Day',
+                    hintText: 'Day 1-31',
+                    prefixIcon: Icons.event,
+                  ),
+                  items: _dayOptions
+                      .map(
+                        (day) => DropdownMenuItem<int>(
+                          value: day,
+                          child: Text('$day'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _isLoading
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _dueDay = value);
+                          }
+                        },
+                  validator: (value) {
+                    if (value == null || value < 1 || value > 31) {
+                      return 'Select day 1-31';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+
+                // Starting Month
+                DropdownButtonFormField<int>(
+                  value: _startMonth,
+                  isExpanded: true,
+                  decoration: _compactInputDecoration(
+                    labelText: 'Starting Month',
+                    hintText: 'Select month',
+                    prefixIcon: Icons.date_range,
+                  ),
+                  items: _monthOptions
+                      .map(
+                        (month) => DropdownMenuItem<int>(
+                          value: month,
+                          child: Text(EmiScheduleHelper.monthName(month)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _isLoading
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _startMonth = value);
+                          }
+                        },
+                  validator: (value) {
+                    if (value == null || value < 1 || value > 12) {
+                      return 'Please select a starting month';
+                    }
+                    return null;
+                  },
+                ),
+                if (firstInstallmentPreview != null) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      firstInstallmentPreview,
+                      style: robotoRegular(context).copyWith(
+                        fontSize: Dimensions.fontSizeExtraSmall(context),
+                        color: widget.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+
+                // Device Lock Day
+                DropdownButtonFormField<int>(
+                  value: _lockDay,
+                  isExpanded: true,
+                  decoration: _compactInputDecoration(
+                    labelText: 'Device Lock Day',
+                    hintText: 'Day 1-31',
+                    prefixIcon: Icons.lock_clock,
+                  ),
+                  items: _dayOptions
+                      .map(
+                        (day) => DropdownMenuItem<int>(
+                          value: day,
+                          child: Text('$day'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: _isLoading
+                      ? null
+                      : (value) {
+                          if (value != null) {
+                            setState(() => _lockDay = value);
+                          }
+                        },
+                  validator: (value) {
+                    if (value == null || value < 1 || value > 31) {
+                      return 'Select day 1-31';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 10),
+
+                // Enable Auto Lock
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  title: Text(
+                    'Enable Auto Lock',
+                    style: textStyle,
+                  ),
+                  subtitle: Text(
+                    'Lock device when installment is unpaid after lock date',
+                    style: robotoRegular(context).copyWith(
+                      fontSize: Dimensions.fontSizeExtraSmall(context),
+                      color: Theme.of(context).hintColor,
+                    ),
+                  ),
+                  value: _enableAutoLock,
+                  onChanged: _isLoading
+                      ? null
+                      : (value) => setState(() => _enableAutoLock = value),
                 ),
               ],
             ),

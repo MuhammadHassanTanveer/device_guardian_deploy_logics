@@ -278,10 +278,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      extendBodyBehindAppBar: true,
       body: AnimatedContainer(
         duration: const Duration(seconds: 1),
-        height: MediaQuery.sizeOf(context).height,
+        width: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -293,6 +292,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
+          top: false,
           child: SingleChildScrollView(
             child: Column(
               children: <Widget>[

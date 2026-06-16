@@ -1261,9 +1261,31 @@ class CustomerProvider with ChangeNotifier {
           debugPrint(
             'Raw is_active: ${customerData['is_active']} (type: ${customerData['is_active'].runtimeType})',
           );
+          debugPrint(
+            'Raw first_active_status: ${customerData['first_active_status']} (type: ${customerData['first_active_status']?.runtimeType})',
+          );
+          debugPrint(
+            'Raw firstActiveStatus: ${customerData['firstActiveStatus']} (type: ${customerData['firstActiveStatus']?.runtimeType})',
+          );
+          debugPrint(
+            'Raw is_first_active: ${customerData['is_first_active']} (type: ${customerData['is_first_active']?.runtimeType})',
+          );
+          debugPrint(
+            'Raw imei_1: ${customerData['imei_1']} (type: ${customerData['imei_1']?.runtimeType})',
+          );
+          debugPrint(
+            'Raw imei_2: ${customerData['imei_2']} (type: ${customerData['imei_2']?.runtimeType})',
+          );
+          debugPrint(
+            'Raw imei_type: ${customerData['imei_type']} (type: ${customerData['imei_type']?.runtimeType})',
+          );
           debugPrint('==================================');
 
           singleCustomer = Datum.fromJson(customerData);
+          singleCustomer = _mergeWithCachedListCustomer(
+            singleCustomer!,
+            customerId,
+          );
 
           // The customer list response currently includes unlock_code, while
           // some single-customer responses may omit it. Keep the model as the
@@ -1292,6 +1314,12 @@ class CustomerProvider with ChangeNotifier {
           debugPrint('Parsed state ID: ${singleCustomer!.state}');
           debugPrint('Parsed city ID: ${singleCustomer!.city}');
           debugPrint('Parsed isActive: ${singleCustomer!.isActive}');
+          debugPrint(
+            'Parsed firstActiveStatus: ${singleCustomer!.firstActiveStatus}',
+          );
+          debugPrint('Parsed imei1: ${singleCustomer!.imei1}');
+          debugPrint('Parsed imei2: ${singleCustomer!.imei2}');
+          debugPrint('Parsed imeiType: ${singleCustomer!.imeiType}');
           debugPrint('===========================');
 
           debugPrint('=== LOADING CUSTOMER IMAGES DEBUG ===');
@@ -1436,6 +1464,9 @@ class CustomerProvider with ChangeNotifier {
     singleUserDevicesError = null;
     customerEmiModel = null;
     emiError = null;
+    emiLockDatesModel = null;
+    emiLockDatesError = null;
+    _activeEmiCustomerId = null;
     isRefreshingSingleCustomer = false;
     existingMobilePictures.clear();
     existingDocuments.clear();
@@ -2174,10 +2205,16 @@ class CustomerProvider with ChangeNotifier {
   bool isEmiLoading = false;
   String? emiError;
   bool isUpdatingEmiPayment = false;
+  EmiLockDatesModel? emiLockDatesModel;
+  bool isEmiLockDatesLoading = false;
+  String? emiLockDatesError;
+  bool isApplyingEmiAutoLock = false;
+  int? _activeEmiCustomerId;
 
   /// Fetch Customer EMI details
-  /// GET: api/mobile/emis/{customerId}
+  /// GET: api/mobile/emis/customer/{customerId}
   Future<bool> fetchCustomerEmi(int customerId) async {
+    _activeEmiCustomerId = customerId;
     isEmiLoading = true;
     emiError = null;
     notifyListeners();
@@ -2191,35 +2228,45 @@ class CustomerProvider with ChangeNotifier {
         return false;
       }
 
-      final url = Uri.parse('${AppConstants.baseUrl}/mobile/emis/$customerId');
+      final headers = {
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $authToken',
+      };
 
-      debugPrint('Fetch Customer EMI URL: $url');
+      final customerScopedUrls = [
+        '${AppConstants.baseUrl}/mobile/emis/customer/$customerId',
+        '${AppConstants.baseUrl}/mobile/emis/customer/$customerId/summary',
+      ];
 
-      final response = await http.get(
-        url,
-        headers: {
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $authToken',
-        },
-      );
+      for (final urlStr in customerScopedUrls) {
+        if (_activeEmiCustomerId != customerId) return false;
 
-      debugPrint('Fetch Customer EMI Response Status: ${response.statusCode}');
-      debugPrint('Fetch Customer EMI Response Body: ${response.body}');
+        final url = Uri.parse(urlStr);
+        debugPrint('Fetch Customer EMI URL: $url');
 
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-        customerEmiModel = CustomerEmiModel.fromJson(responseData);
-        return customerEmiModel?.success ?? false;
-      } else if (response.statusCode == 401) {
-        await SessionManager.handleSessionExpiry(response.statusCode);
-        emiError = 'Session expired. Please login again.';
-        return false;
-      } else if (response.statusCode == 404) {
-        customerEmiModel = CustomerEmiModel.empty(
-          message: 'No EMI records found.',
-        );
-        return true;
-      } else {
+        final response = await http.get(url, headers: headers);
+
+        if (_activeEmiCustomerId != customerId) return false;
+
+        debugPrint('Fetch Customer EMI Response Status: ${response.statusCode}');
+        debugPrint('Fetch Customer EMI Response Body: ${response.body}');
+
+        if (response.statusCode == 200) {
+          final responseData = json.decode(response.body);
+          customerEmiModel = CustomerEmiModel.fromJson(responseData);
+          return customerEmiModel?.success ?? false;
+        }
+
+        if (response.statusCode == 404) {
+          continue;
+        }
+
+        if (response.statusCode == 401) {
+          await SessionManager.handleSessionExpiry(response.statusCode);
+          emiError = 'Session expired. Please login again.';
+          return false;
+        }
+
         try {
           final errorData = json.decode(response.body);
           emiError = errorData['message'] ?? 'Failed to fetch EMI details';
@@ -2228,13 +2275,22 @@ class CustomerProvider with ChangeNotifier {
         }
         return false;
       }
+
+      customerEmiModel = CustomerEmiModel.empty(
+        message: 'No EMI records found.',
+      );
+      return true;
     } catch (e) {
       debugPrint('Error fetching customer EMI: $e');
-      emiError = 'Network error: ${e.toString()}';
+      if (_activeEmiCustomerId == customerId) {
+        emiError = 'Network error: ${e.toString()}';
+      }
       return false;
     } finally {
-      isEmiLoading = false;
-      notifyListeners();
+      if (_activeEmiCustomerId == customerId) {
+        isEmiLoading = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -2434,16 +2490,194 @@ class CustomerProvider with ChangeNotifier {
   void clearEmiData() {
     customerEmiModel = null;
     emiError = null;
+    emiLockDatesModel = null;
+    emiLockDatesError = null;
+    _activeEmiCustomerId = null;
     notifyListeners();
+  }
+
+  /// GET: api/mobile/emis/customer/{customerId}/lock-dates
+  Future<EmiLockDatesModel?> fetchEmiLockDates(int customerId) async {
+    isEmiLockDatesLoading = true;
+    emiLockDatesError = null;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final authToken = prefs.getString('auth_token') ?? '';
+
+      if (authToken.isEmpty) {
+        emiLockDatesError = 'Authentication token not found. Please login again.';
+        return null;
+      }
+
+      final url = Uri.parse(
+        '${AppConstants.baseUrl}/mobile/emis/customer/$customerId/lock-dates',
+      );
+
+      debugPrint('Fetch EMI Lock Dates URL: $url');
+
+      final response = await http.get(
+        url,
+        headers: {
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $authToken',
+        },
+      );
+
+      debugPrint('Fetch EMI Lock Dates Status: ${response.statusCode}');
+      debugPrint('Fetch EMI Lock Dates Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final responseData = json.decode(response.body);
+        emiLockDatesModel = EmiLockDatesModel.fromJson(responseData);
+        return emiLockDatesModel;
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        emiLockDatesError = 'Session expired. Please login again.';
+        return null;
+      } else if (response.statusCode == 404) {
+        emiLockDatesModel = null;
+        emiLockDatesError = null;
+        return null;
+      } else {
+        try {
+          final errorData = json.decode(response.body);
+          emiLockDatesError =
+              errorData['message'] ?? 'Failed to fetch EMI lock dates';
+        } catch (e) {
+          emiLockDatesError =
+              'Failed to fetch EMI lock dates: ${response.statusCode}';
+        }
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error fetching EMI lock dates: $e');
+      emiLockDatesError = 'Network error: ${e.toString()}';
+      return null;
+    } finally {
+      isEmiLockDatesLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Checks lock-dates API and sends lock/unlock command when auto-lock is enabled.
+  Future<bool> applyEmiAutoLockIfNeeded(int customerId) async {
+    isApplyingEmiAutoLock = true;
+    notifyListeners();
+
+    try {
+      final lockDates = await fetchEmiLockDates(customerId);
+      final data = lockDates?.data;
+
+      if (data == null || !data.enableAutoLock) {
+        return false;
+      }
+
+      final shouldLock = data.deviceShouldBeLocked ||
+          data.installments.any((i) => i.shouldLockDevice);
+
+      if (!shouldLock) {
+        return false;
+      }
+
+      debugPrint('EMI auto-lock: sending lock command for customer $customerId');
+
+      return await sendMobileNotification(
+        customerId: customerId,
+        status: 'lock',
+      );
+    } catch (e) {
+      debugPrint('Error applying EMI auto-lock: $e');
+      return false;
+    } finally {
+      isApplyingEmiAutoLock = false;
+      notifyListeners();
+    }
+  }
+
+  Map<String, dynamic> _parseEmiValidationError(
+    Map<String, dynamic> errorData,
+    int statusCode,
+    String fallbackMessage,
+  ) {
+    final errors = errorData['errors'];
+    String? validationError;
+    Map<String, dynamic>? fieldErrors;
+
+    if (errors is Map && errors.isNotEmpty) {
+      fieldErrors = errors.map(
+        (key, value) => MapEntry(key.toString(), value),
+      );
+      final firstError = errors.values.first;
+      if (firstError is List && firstError.isNotEmpty) {
+        validationError = firstError.first.toString();
+      } else if (firstError != null) {
+        validationError = firstError.toString();
+      }
+    }
+
+    return {
+      'success': false,
+      'error': validationError ?? errorData['message'] ?? fallbackMessage,
+      'statusCode': statusCode,
+      'fieldErrors': fieldErrors,
+      'hasActiveEmi': statusCode == 422 &&
+          (errorData['message']?.toString().toLowerCase().contains('active emi') ??
+              false),
+    };
+  }
+
+  Datum? _findCachedCustomer(int customerId) {
+    for (final customer in paginatedCustomers) {
+      if (customer.id == customerId) {
+        return customer;
+      }
+    }
+    return null;
+  }
+
+  Datum _mergeWithCachedListCustomer(Datum customer, int customerId) {
+    final cached = _findCachedCustomer(customerId);
+    if (cached == null) return customer;
+
+    return customer.copyWith(
+      imei1: customer.imei1.trim().isNotEmpty ? customer.imei1 : cached.imei1,
+      imei2: (customer.imei2 != null && customer.imei2!.trim().isNotEmpty)
+          ? customer.imei2
+          : cached.imei2,
+      imeiType: customer.imeiType.trim().isNotEmpty
+          ? customer.imeiType
+          : cached.imeiType,
+      firstActiveStatus:
+          customer.firstActiveStatus || cached.firstActiveStatus,
+      unlockCode: (customer.unlockCode != null &&
+              customer.unlockCode!.trim().isNotEmpty)
+          ? customer.unlockCode
+          : cached.unlockCode,
+    );
+  }
+
+  ({String imei1, String? imei2, String imeiType}) resolveImeisForDeviceApi(
+    Datum customer,
+  ) {
+    final merged = _mergeWithCachedListCustomer(customer, customer.id);
+    final imei1 = merged.imei1.trim();
+    final imei2Raw = merged.imei2?.trim();
+    final imei2 = (imei2Raw != null && imei2Raw.isNotEmpty) ? imei2Raw : null;
+    final imeiType = merged.isDualImeiDevice ? 'double' : 'single';
+
+    return (imei1: imei1, imei2: imei2, imeiType: imeiType);
   }
 
   // Re-activate customer state
   bool isReactivatingCustomer = false;
 
   /// POST: api/mobile/update_customer_is_active_status
-  Future<bool> updateCustomerIsActiveStatus({
+  Future<Map<String, dynamic>> updateCustomerIsActiveStatus({
     required String imei1,
     String? imei2,
+    String? imeiType,
     required int isActive,
   }) async {
     isReactivatingCustomer = true;
@@ -2453,6 +2687,13 @@ class CustomerProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final authToken = prefs.getString('auth_token') ?? '';
 
+      if (authToken.isEmpty) {
+        return {
+          'success': false,
+          'error': 'Authentication token not found. Please login again.',
+        };
+      }
+
       final url = Uri.parse(
         '${AppConstants.baseUrl}/mobile/update_customer_is_active_status',
       );
@@ -2460,16 +2701,44 @@ class CustomerProvider with ChangeNotifier {
       final headers = <String, String>{
         'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'Authorization': 'Bearer $authToken',
       };
-      if (authToken.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $authToken';
+
+      final trimmedImei1 = imei1.trim();
+      final trimmedImei2 = imei2?.trim();
+      final resolvedImeiType = (imeiType ?? '').toLowerCase();
+      final isDualImei = resolvedImeiType == 'double' ||
+          (trimmedImei2 != null && trimmedImei2.isNotEmpty);
+
+      if (trimmedImei1.isEmpty) {
+        return {
+          'success': false,
+          'error': 'IMEI-1 is required',
+          'code': 'IMEI_REQUIRED',
+        };
+      }
+
+      if (isDualImei &&
+          (trimmedImei2 == null || trimmedImei2.isEmpty)) {
+        return {
+          'success': false,
+          'error':
+              'Both IMEI numbers are required for dual IMEI devices',
+          'code': 'IMEI_MISMATCH',
+        };
       }
 
       final body = <String, dynamic>{
-        'imei_1': imei1,
-        'imei_2': imei2 ?? '',
+        'imei_1': trimmedImei1,
         'is_active': isActive,
       };
+
+      if (isDualImei) {
+        body['imei_2'] = trimmedImei2;
+        body['imei_type'] = 'double';
+      } else {
+        body['imei_type'] = 'single';
+      }
 
       debugPrint('Update Customer IsActive Status URL: $url');
       debugPrint('Update Customer IsActive Status Body: $body');
@@ -2486,13 +2755,32 @@ class CustomerProvider with ChangeNotifier {
 
       if (response.statusCode == 401) {
         await SessionManager.handleSessionExpiry(response.statusCode);
-        return false;
+        return SessionManager.sessionExpiredResponse();
       }
 
-      return response.statusCode == 200 || response.statusCode == 201;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {'success': true};
+      }
+
+      try {
+        final errorData = json.decode(response.body);
+        return {
+          'success': false,
+          'error':
+              errorData['message'] ??
+              'Failed to update customer status (${response.statusCode})',
+          'code': errorData['code']?.toString(),
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'error':
+              'Failed to update customer status (${response.statusCode})',
+        };
+      }
     } catch (e) {
       debugPrint('Error updating isActive status: $e');
-      return false;
+      return {'success': false, 'error': 'Network error: ${e.toString()}'};
     } finally {
       isReactivatingCustomer = false;
       notifyListeners();
@@ -2550,9 +2838,14 @@ class CustomerProvider with ChangeNotifier {
   Future<Map<String, dynamic>> insertCustomerEmi({
     required int customerId,
     required String purchaseDate,
+    required int dueDay,
+    required int lockDay,
+    required int startMonth,
     required String totalAmount,
     required String advanceAmount,
     required String totalMonths,
+    bool enableAutoLock = false,
+    String? remarks,
   }) async {
     // Get auth token from SharedPreferences
     final prefs = await SharedPreferences.getInstance();
@@ -2580,9 +2873,14 @@ class CustomerProvider with ChangeNotifier {
         body: json.encode({
           'customer_id': customerId,
           'purchase_date': purchaseDate,
+          'due_day': dueDay,
+          'lock_day': lockDay,
+          'start_month': startMonth,
           'total_amount': totalAmount,
           'advance_amount': advanceAmount,
           'total_months': totalMonths,
+          'enable_auto_lock': enableAutoLock,
+          if (remarks != null && remarks.isNotEmpty) 'remarks': remarks,
         }),
       );
 
@@ -2607,6 +2905,25 @@ class CustomerProvider with ChangeNotifier {
       } else if (response.statusCode == 401) {
         await SessionManager.handleSessionExpiry(response.statusCode);
         return SessionManager.sessionExpiredResponse();
+      } else if (response.statusCode == 422 || response.statusCode == 404) {
+        try {
+          final errorData = json.decode(response.body);
+          return _parseEmiValidationError(
+            errorData,
+            response.statusCode,
+            response.statusCode == 404
+                ? 'Customer not found'
+                : 'Failed to add EMI details',
+          );
+        } catch (e) {
+          return {
+            'success': false,
+            'error': response.statusCode == 404
+                ? 'Customer not found'
+                : 'Failed to add EMI details: ${response.statusCode}',
+            'statusCode': response.statusCode,
+          };
+        }
       } else {
         try {
           final errorData = json.decode(response.body);
@@ -2615,11 +2932,13 @@ class CustomerProvider with ChangeNotifier {
             'error':
                 errorData['message'] ??
                 'Failed to add EMI details: ${response.statusCode}',
+            'statusCode': response.statusCode,
           };
         } catch (e) {
           return {
             'success': false,
             'error': 'Failed to add EMI details: ${response.statusCode}',
+            'statusCode': response.statusCode,
           };
         }
       }

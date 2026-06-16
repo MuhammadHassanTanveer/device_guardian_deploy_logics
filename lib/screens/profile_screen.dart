@@ -51,16 +51,19 @@ class _ProfileScreenState extends State<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Consumer<ProfileProvider>(
-        builder: (context, profileProvider, child) {
-          if (profileProvider.isLoading) {
-            return _buildLoadingShimmer();
-          }
-          if (profileProvider.errorMessage != null) {
-            return _buildErrorWidget(profileProvider);
-          }
-          return _buildProfileContent(profileProvider);
-        },
+      body: SafeArea(
+        top: false,
+        child: Consumer<ProfileProvider>(
+          builder: (context, profileProvider, child) {
+            if (profileProvider.isLoading) {
+              return _buildLoadingShimmer();
+            }
+            if (profileProvider.errorMessage != null) {
+              return _buildErrorWidget(profileProvider);
+            }
+            return _buildProfileContent(profileProvider);
+          },
+        ),
       ),
     );
   }
@@ -98,13 +101,12 @@ class _ProfileScreenState extends State<ProfileScreen>
           ],
         ),
       ),
-      child: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(Dimensions.paddingSizeLarge),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(Dimensions.paddingSizeLarge),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -155,7 +157,6 @@ class _ProfileScreenState extends State<ProfileScreen>
             ),
           ),
         ),
-      ),
     );
   }
 

@@ -167,6 +167,7 @@ class _UpdatePinScreenState extends State<UpdatePinScreen> {
           ),
         ),
         child: SafeArea(
+          top: false,
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(Dimensions.paddingSizeLarge),
             child: Form(

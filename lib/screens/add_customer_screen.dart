@@ -56,6 +56,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
 
   bool isEditMode = false;
   bool _isEditDataLoaded = false; // Track if edit data is fully loaded
+  bool _imeiFieldsLocked = false;
   CustomerProvider? _customerProvider;
 
   @override
@@ -196,6 +197,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
 
   Future<void> _loadCustomerData() async {
     final customerProvider = Provider.of<CustomerProvider>(context, listen: false);
+
+    customerProvider.clearEditData();
     
     // Fetch countries first
     await customerProvider.fetchCountries();
@@ -253,21 +256,28 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
 
       if (customer.imei2 != null && customer.imei2!.isNotEmpty) {
         customerProvider.setImeiCount(2);
+      } else if (customer.imeiType.toLowerCase() == 'double') {
+        customerProvider.setImeiCount(2);
       } else {
         customerProvider.setImeiCount(1);
       }
-      
-      // Debug: Log isActive value before setting edit data as loaded
-      debugPrint('=== CUSTOMER IS_ACTIVE DEBUG ===');
-      debugPrint('customer.isActive: ${customer.isActive}');
-      debugPrint('customer.isActive type: ${customer.isActive.runtimeType}');
-      debugPrint('isActive != 0: ${customer.isActive != 0}');
-      debugPrint('================================');
+
+      _imeiFieldsLocked = customer.firstActiveStatus;
+
+      debugPrint('=== CUSTOMER FIRST ACTIVE STATUS DEBUG ===');
+      debugPrint('Customer ID: ${customer.id}');
+      debugPrint('is_active: ${customer.isActive}');
+      debugPrint('firstActiveStatus: ${customer.firstActiveStatus}');
+      debugPrint('imeiType: ${customer.imeiType}');
+      debugPrint('IMEI locked: $_imeiFieldsLocked');
+      debugPrint('==========================================');
       
       // Mark edit data as loaded
-      setState(() {
-        _isEditDataLoaded = true;
-      });
+      if (mounted) {
+        setState(() {
+          _isEditDataLoaded = true;
+        });
+      }
     }
   }
 
@@ -458,7 +468,15 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
   }
 
   /// Opens QR/Barcode scanner dialog and fills the controller with scanned value
+  bool _isImeiLocked(CustomerProvider provider) {
+    if (!isEditMode) return false;
+    return _imeiFieldsLocked || provider.singleCustomer?.firstActiveStatus == true;
+  }
+
   void _openQrScanner(TextEditingController controller, String title) {
+    final provider = _customerProvider ??
+        Provider.of<CustomerProvider>(context, listen: false);
+    if (_isImeiLocked(provider)) return;
     showQrScannerDialog(
       context: context,
       title: title,
@@ -789,45 +807,63 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                         ),
                                         const SizedBox(height: Dimensions.paddingSizeSmall),
                                         Consumer<CustomerProvider>(
-                                          builder: (context, provider, child) => Column(
-                                            children: [
-                                              RadioListTile(
-                                                title: Text('Single IMEI سنگل آئی ایم ای آئی'),
-                                                value: 1,
-                                                groupValue: provider.imeiCount,
-                                                onChanged: (value) => provider.setImeiCount(value!),
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                              RadioListTile(
-                                                title: Text('Dual IMEI ڈوئل آئی ایم آئی'),
-                                                value: 2,
-                                                groupValue: provider.imeiCount,
-                                                onChanged: (value) => provider.setImeiCount(value!),
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                            ],
-                                          ),
+                                          builder: (context, provider, child) {
+                                            final bool isImeiDisabled =
+                                                _isImeiLocked(provider);
+
+                                            return Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                RadioListTile<int>(
+                                                  title: Text(
+                                                    'Single IMEI سنگل آئی ایم ای آئی',
+                                                  ),
+                                                  value: 1,
+                                                  groupValue:
+                                                      provider.imeiCount,
+                                                  onChanged: isImeiDisabled
+                                                      ? null
+                                                      : (value) {
+                                                          if (value != null) {
+                                                            provider.setImeiCount(
+                                                              value,
+                                                            );
+                                                          }
+                                                        },
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                ),
+                                                RadioListTile<int>(
+                                                  title: Text(
+                                                    'Dual IMEI ڈوئل آئی ایم آئی',
+                                                  ),
+                                                  value: 2,
+                                                  groupValue:
+                                                      provider.imeiCount,
+                                                  onChanged: isImeiDisabled
+                                                      ? null
+                                                      : (value) {
+                                                          if (value != null) {
+                                                            provider.setImeiCount(
+                                                              value,
+                                                            );
+                                                          }
+                                                        },
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                ),
+                                              ],
+                                            );
+                                          },
                                         ),
                                         const SizedBox(height: Dimensions.paddingSizeDefault),
-                                        // IMEI fields are disabled if customer is_active != 0 in edit mode
+                                        // IMEI fields are disabled when first_active_status is true in edit mode
                                         Consumer<CustomerProvider>(
                                           builder: (context, provider, child) {
-                                            // Check if IMEI fields should be disabled
-                                            final bool isImeiDisabled = isEditMode && 
-                                                provider.singleCustomer != null && 
-                                                provider.singleCustomer!.isActive != 0;
-                                            
-                                            // Debug logging
-                                            debugPrint('=== IMEI DISABLE CHECK ===');
-                                            debugPrint('isEditMode: $isEditMode');
-                                            debugPrint('singleCustomer is null: ${provider.singleCustomer == null}');
-                                            if (provider.singleCustomer != null) {
-                                              debugPrint('singleCustomer.isActive: ${provider.singleCustomer!.isActive}');
-                                              debugPrint('isActive type: ${provider.singleCustomer!.isActive.runtimeType}');
-                                            }
-                                            debugPrint('isImeiDisabled: $isImeiDisabled');
-                                            debugPrint('==========================');
-                                            
+                                            final bool isImeiDisabled =
+                                                _isImeiLocked(provider);
+
                                             return Column(
                                               children: [
                                                 // Show warning message if IMEI fields are disabled
@@ -846,7 +882,7 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
                                                         const SizedBox(width: Dimensions.paddingSizeSmall),
                                                         Expanded(
                                                           child: Text(
-                                                            'IMEI cannot be changed for active customers\nفعال کسٹمرز کے لیے IMEI تبدیل نہیں کیا جا سکتا',
+                                                            'IMEI cannot be changed once the device has been activated\nڈیوائس ایکٹیویٹ ہونے کے بعد IMEI تبدیل نہیں کیا جا سکتا',
                                                             style: robotoRegular(context).copyWith(
                                                               fontSize: Dimensions.fontSizeExtraSmall(context),
                                                               color: Colors.orange[800],
@@ -1594,9 +1630,27 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
       debugPrint('----- DEVICE INFO -----');
       debugPrint('Mobile Type: $_selectedMobileType');
       debugPrint('Mobile Model: ${mobileModelController.text.trim()}');
-      debugPrint('IMEI-1: ${imei1Controller.text.trim()}');
-      debugPrint('IMEI-2: ${customerProvider.imeiCount == 2 ? imei2Controller.text.trim() : 'N/A'}');
-      debugPrint('IMEI Type: ${(customerProvider.imeiCount == 2 && imei2Controller.text.trim().isNotEmpty) ? 'double' : 'single'}');
+      final customer = customerProvider.singleCustomer;
+      final isImeiLocked = _isImeiLocked(customerProvider);
+      final imei1Value = isImeiLocked
+          ? customer?.imei1 ?? imei1Controller.text.trim()
+          : imei1Controller.text.trim();
+      final imei2Value = isImeiLocked
+          ? customer?.imei2
+          : (customerProvider.imeiCount == 2
+              ? imei2Controller.text.trim()
+              : null);
+
+      debugPrint('IMEI-1: $imei1Value');
+      debugPrint(
+        'IMEI-2: ${customerProvider.imeiCount == 2 ? (imei2Value ?? '') : 'N/A'}',
+      );
+      debugPrint(
+        'IMEI locked (first_active_status): $isImeiLocked',
+      );
+      debugPrint(
+        'IMEI Type: ${(customerProvider.imeiCount == 2 && (imei2Value?.isNotEmpty ?? false)) ? 'double' : 'single'}',
+      );
       debugPrint('==========================================');
 
       final result = isEditMode
@@ -1606,8 +1660,8 @@ class _AddCustomerScreenState extends State<AddCustomerScreen> {
               email: emailController.text.trim(),
               cnic: cnicController.text.trim(),
               customerMobileNo: phoneWithCountryCode,
-              imei1: imei1Controller.text.trim(),
-              imei2: customerProvider.imeiCount == 2 ? imei2Controller.text.trim() : null,
+              imei1: imei1Value,
+              imei2: customerProvider.imeiCount == 2 ? imei2Value : null,
               address: addressController.text.trim(),
               countryId: selectedCountryId,
               cityId: selectedCityId,

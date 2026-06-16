@@ -188,9 +188,25 @@ class _LinkDevicesScreenState extends State<LinkDevicesScreen> {
         elevation: 0,
         backgroundColor: colorScheme.surface,
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshSessions,
-        child: _buildBody(context, provider),
+      body: AnimatedContainer(
+        duration: const Duration(seconds: 1),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              colorScheme.surface,
+              colorScheme.tertiaryContainer,
+            ],
+          ),
+        ),
+        child: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: _refreshSessions,
+            child: _buildBody(context, provider),
+          ),
+        ),
       ),
     );
   }

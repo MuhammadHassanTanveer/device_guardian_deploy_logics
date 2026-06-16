@@ -150,6 +150,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           ),
         ),
         child: SafeArea(
+          top: false,
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(Dimensions.paddingSizeLarge),
             child: Form(
