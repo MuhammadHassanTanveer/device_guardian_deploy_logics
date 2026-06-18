@@ -115,8 +115,8 @@ class _HomeScreenState extends State<HomeScreen> {
       showAppUpdateDialog(
         context,
         downloadUrl: homeProvider.downloadUrl,
-        currentVersion: AppConstants.appVersion,
-        newVersion: homeProvider.appVersionData?.appVersion ?? '',
+        currentVersion: homeProvider.installedAppVersion,
+        newVersion: homeProvider.latestServerVersion,
       );
     }
   }

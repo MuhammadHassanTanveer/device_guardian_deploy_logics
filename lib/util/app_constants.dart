@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'app_version_util.dart';
 
 class AppConstants {
   static const String appName = 'Device Guardian Customer';
@@ -13,6 +13,7 @@ class AppConstants {
   static const double maxSizeOfASingleFile = 10;
   static const double maxImageSend = 10;
 
-  // App Version - Update this when releasing a new version
-  static const String appVersion = '1.0.5';
+  /// Installed app version on this device (read from pubspec.yaml at startup).
+  /// When releasing: bump `version` in pubspec.yaml and match `app_version` in API admin.
+  static String get appVersion => AppVersionUtil.installedVersion;
 }

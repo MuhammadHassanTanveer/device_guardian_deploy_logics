@@ -41,8 +41,8 @@ class _SplashScreenState extends State<SplashScreen> {
       showAppUpdateDialog(
         context,
         downloadUrl: homeProvider.downloadUrl,
-        currentVersion: AppConstants.appVersion,
-        newVersion: homeProvider.appVersionData?.appVersion ?? '',
+        currentVersion: homeProvider.installedAppVersion,
+        newVersion: homeProvider.latestServerVersion,
       );
       return;
     }

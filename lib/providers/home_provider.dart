@@ -31,6 +31,9 @@ class HomeProvider with ChangeNotifier {
   CreatedByUserModel? get createdByUser => _createdByUser;
   bool get isVersionOutdated => _isVersionOutdated;
   String get downloadUrl => _downloadUrl;
+  String get installedAppVersion => AppConstants.appVersion;
+  String get latestServerVersion =>
+      (_appVersionData?.appVersion ?? '').trim();
 
   // Count data getters with fallbacks
   int get total => _parseToInt(_countsData?['total']);
@@ -211,7 +214,7 @@ class HomeProvider with ChangeNotifier {
           _createdByUser = appInfo.createdByUser;
           _downloadUrl = _appVersionData?.appDownloadUrl ?? '';
 
-          final serverVersion = _appVersionData?.appVersion ?? '';
+          final serverVersion = (_appVersionData?.appVersion ?? '').trim();
           final localVersion = AppConstants.appVersion;
 
           debugPrint("Server Version: $serverVersion");

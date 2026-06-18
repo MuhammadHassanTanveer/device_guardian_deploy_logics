@@ -8,6 +8,7 @@ import 'package:deviceguardianadmin/providers/profile_provider.dart';
 import 'package:deviceguardianadmin/providers/purchase_history_provider.dart';
 import 'package:deviceguardianadmin/providers/registration_provider.dart';
 import 'package:deviceguardianadmin/screens/splash_screen.dart';
+import 'package:deviceguardianadmin/util/app_version_util.dart';
 import 'package:deviceguardianadmin/theme/light_theme.dart';
 import 'package:deviceguardianadmin/util/notification_services.dart';
 import 'package:deviceguardianadmin/util/session_manager.dart';
@@ -28,6 +29,7 @@ NotificationServices notificationServices = NotificationServices();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppVersionUtil.init();
   // await Firebase.initializeApp(
   //   options: DefaultFirebaseOptions.currentPlatform,
   // );
