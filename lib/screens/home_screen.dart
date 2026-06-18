@@ -42,10 +42,22 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Fetch counts and user name when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initHomeData();
+      _checkPinAndInit();
     });
+  }
+
+  Future<void> _checkPinAndInit() async {
+    final loginProvider = context.read<LoginProvider>();
+    if (!await loginProvider.hasPinConfigured()) {
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
+        (route) => false,
+      );
+      return;
+    }
+    await _initHomeData();
   }
 
   Future<void> _refreshHomeData() async {
@@ -57,20 +69,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (mounted) {
       _precacheQrImages(homeProvider);
+      _checkAndShowUpdateDialog();
       setState(() => _isRefreshing = false);
     }
   }
 
   Future<void> _initHomeData() async {
     await _refreshHomeData();
+  }
 
-    // Check if version is outdated and show dialog
-    if (mounted) {
-      final homeProvider = context.read<HomeProvider>();
-      if (homeProvider.isVersionOutdated && !_versionDialogShown) {
-        _versionDialogShown = true;
-        _showUpdateDialogIfNeeded();
-      }
+  void _checkAndShowUpdateDialog() {
+    if (!mounted || _versionDialogShown) return;
+
+    final homeProvider = context.read<HomeProvider>();
+    if (homeProvider.isVersionOutdated) {
+      _versionDialogShown = true;
+      _showUpdateDialogIfNeeded();
     }
   }
 

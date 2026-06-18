@@ -303,14 +303,18 @@ class LoginProvider with ChangeNotifier {
             return _pinCode;
           } else {
             debugPrint("getPinCode: Pin code is null or empty");
-            return ''; // Return empty string to indicate pin is not set
+            _pinCode = null;
+            await prefs.remove('pin_code');
+            return '';
           }
         } else {
           // Check if message indicates pin code not set
           final message = data['message']?.toString().toLowerCase() ?? '';
           if (message.contains('pin code not set') || message.contains('pin not set')) {
             debugPrint("getPinCode: API returned pin code not set");
-            return ''; // Return empty string to indicate pin is not set
+            _pinCode = null;
+            await prefs.remove('pin_code');
+            return '';
           }
           debugPrint("getPinCode: API returned success/status=false");
           return null;
@@ -426,6 +430,16 @@ class LoginProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     _pinCode = prefs.getString('pin_code');
     return _pinCode;
+  }
+
+  /// Whether the retailer has a PIN set (API first; local storage only if API fails).
+  Future<bool> hasPinConfigured() async {
+    final pinCode = await getPinCode();
+    if (pinCode != null) {
+      return pinCode.isNotEmpty;
+    }
+    final storedPin = await getStoredPinCode();
+    return storedPin != null && storedPin.isNotEmpty;
   }
 
   /// Logout user - calls API and clears all local data

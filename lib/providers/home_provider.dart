@@ -189,25 +189,14 @@ class HomeProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Fetch app version from API and check if update is required
+  /// Fetch app version from API and check if update is required (no auth required)
   Future<bool> getAppVersion() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('auth_token') ?? '';
-
-      if (token.isEmpty) {
-        debugPrint("App Version fetch skipped: auth token is empty");
-        _isVersionOutdated = false;
-        notifyListeners();
-        return false;
-      }
-
       final response = await http.get(
         Uri.parse('${AppConstants.baseUrl}/app-info'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
         },
       );
 
@@ -234,13 +223,8 @@ class HomeProvider with ChangeNotifier {
           notifyListeners();
           return _isVersionOutdated;
         }
-      } else if (response.statusCode == 401) {
-        await SessionManager.handleSessionExpiry(response.statusCode);
-        _isVersionOutdated = false;
-        notifyListeners();
-        return false;
       }
-      
+
       _isVersionOutdated = false;
       notifyListeners();
       return false;

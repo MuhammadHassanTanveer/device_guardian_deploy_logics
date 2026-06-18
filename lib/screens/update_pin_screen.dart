@@ -130,7 +130,9 @@ class _UpdatePinScreenState extends State<UpdatePinScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !widget.isFirstTime,
+      child: Scaffold(
       appBar: AppBar(
         automaticallyImplyLeading: !widget.isFirstTime, // Hide back button on first time setup
         title: Column(
@@ -365,6 +367,7 @@ class _UpdatePinScreenState extends State<UpdatePinScreen> {
           ),
         ),
       ),
+    ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:deviceguardianadmin/providers/login_provider.dart';
 import 'package:deviceguardianadmin/util/app_constants.dart';
 import 'package:deviceguardianadmin/util/session_manager.dart';
 import 'package:deviceguardianadmin/util/styles.dart';
+import 'package:deviceguardianadmin/widgets/app_update_dialog.dart';
 import 'package:deviceguardianadmin/widgets/guardian_loading_animation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -32,43 +33,35 @@ class _SplashScreenState extends State<SplashScreen> {
     final loginProvider = context.read<LoginProvider>();
     final homeProvider = context.read<HomeProvider>();
 
+    // Check app version for all users (logged in or not) before navigation
+    final isOutdated = await homeProvider.getAppVersion();
+    if (!mounted) return;
+
+    if (isOutdated) {
+      showAppUpdateDialog(
+        context,
+        downloadUrl: homeProvider.downloadUrl,
+        currentVersion: AppConstants.appVersion,
+        newVersion: homeProvider.appVersionData?.appVersion ?? '',
+      );
+      return;
+    }
+
     if (!await loginProvider.checkLoginStatus()) {
       _navigateToLogin();
       return;
     }
 
-    // Validate token with server before leaving splash (may trigger session expiry).
-    await homeProvider.getAppVersion();
     if (!mounted || !await SessionManager.isSessionActive()) {
       return;
     }
 
-    final storedPin = await loginProvider.getStoredPinCode();
-    if (!mounted || !await SessionManager.isSessionActive()) {
-      return;
-    }
-
-    if (storedPin != null && storedPin.isNotEmpty) {
-      debugPrint('PIN found in SharedPreferences, going to home');
+    if (await loginProvider.hasPinConfigured()) {
+      debugPrint('PIN configured, going to home');
       _navigateToHome();
-      return;
-    }
-
-    debugPrint('No local PIN, checking API...');
-    final pinCode = await loginProvider.getPinCode();
-    if (!mounted || !await SessionManager.isSessionActive()) {
-      return;
-    }
-
-    if (pinCode != null && pinCode.isNotEmpty) {
-      debugPrint('PIN found from API, going to home');
-      _navigateToHome();
-    } else if (pinCode != null && pinCode.isEmpty) {
-      debugPrint('API says PIN not set, showing Update PIN screen');
-      _navigateToUpdatePin();
     } else {
-      debugPrint('PIN API failed (network), going to home');
-      _navigateToHome();
+      debugPrint('PIN not set, showing Update PIN screen');
+      _navigateToUpdatePin();
     }
   }
 
