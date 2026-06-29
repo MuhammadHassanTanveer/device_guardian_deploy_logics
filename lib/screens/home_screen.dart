@@ -26,6 +26,7 @@ import 'change_password_screen.dart';
 import 'link_devices_screen.dart';
 import 'profile_screen.dart';
 import 'purchase_history_screen.dart';
+import 'shop_location_screen.dart';
 import 'update_pin_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -49,6 +50,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkPinAndInit() async {
     final loginProvider = context.read<LoginProvider>();
+    if (!await loginProvider.hasShopLocationConfigured()) {
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const ShopLocationScreen()),
+        (route) => false,
+      );
+      return;
+    }
     if (!await loginProvider.hasPinConfigured()) {
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(

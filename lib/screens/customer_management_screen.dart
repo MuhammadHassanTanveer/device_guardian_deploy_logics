@@ -179,6 +179,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       provider.fetchSimDetails(
         widget.customerId,
       ), // Fetch SIM details on screen open
+      provider.fetchCustomerLocation(widget.customerId),
     ]);
 
     await provider.fetchEmiLockDates(widget.customerId);
@@ -207,6 +208,7 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
       provider.fetchSingleUserDevicesForCustomer(widget.customerId),
       provider.fetchCustomerEmi(widget.customerId),
       provider.fetchSimDetails(widget.customerId),
+      provider.fetchCustomerLocation(widget.customerId),
     ]);
 
     await provider.fetchEmiLockDates(widget.customerId);
@@ -498,53 +500,144 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     );
   }
 
-  // Method to handle Get Location with 2-second delay API call
-  Future<void> _handleGetLocation() async {
+  Future<void> _showPleaseWaitDialog({
+    required String message,
+    required String messageUrdu,
+  }) {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(Dimensions.radiusDefault),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: CircularProgressIndicator(strokeWidth: 3),
+                ),
+                const SizedBox(height: Dimensions.paddingSizeDefault),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: robotoMedium(context),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  messageUrdu,
+                  textAlign: TextAlign.center,
+                  style: robotoRegular(context).copyWith(
+                    fontSize: Dimensions.fontSizeSmall(context),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _hidePleaseWaitDialog() {
+    if (!mounted) return;
+    final navigator = Navigator.of(context, rootNavigator: true);
+    if (navigator.canPop()) {
+      navigator.pop();
+    }
+  }
+
+  Future<void> _runCommandWithPleaseWaitDialog({
+    required String commandKey,
+    required String notificationStatus,
+    required String waitMessage,
+    required String waitMessageUrdu,
+    required String notificationFailedMessage,
+    required Future<bool> Function() fetchData,
+    required String Function() getFetchFailedMessage,
+    Future<void> Function()? onSuccess,
+  }) async {
     final provider = context.read<CustomerProvider>();
-    provider.setCommandLoading('get_current_location', true);
+    provider.setCommandLoading(commandKey, true);
+    final startedAt = DateTime.now();
+
+    if (!mounted) return;
+    _showPleaseWaitDialog(
+      message: waitMessage,
+      messageUrdu: waitMessageUrdu,
+    );
 
     try {
       final ok = await provider.sendMobileNotification(
         customerId: widget.customerId,
-        status: 'get_current_location',
+        status: notificationStatus,
       );
 
       if (!mounted) return;
 
       if (ok) {
-        showCustomSnackBar(
-          context,
-          'Location request sent. Fetching location...',
-          isError: false,
-        );
-
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 1));
 
         if (!mounted) return;
 
-        final locationFetched = await provider.fetchCustomerLocation(
-          widget.customerId,
-        );
+        final fetched = await fetchData();
 
         if (!mounted) return;
 
-        if (!locationFetched) {
+        if (fetched) {
+          if (onSuccess != null) {
+            await onSuccess();
+          }
+        } else {
           showCustomSnackBar(
             context,
-            provider.locationError ?? 'Failed to fetch location',
+            getFetchFailedMessage(),
             isError: true,
           );
         }
       } else {
         showCustomSnackBar(
           context,
-          'Failed to send location command',
+          notificationFailedMessage,
           isError: true,
         );
       }
     } finally {
-      provider.setCommandLoading('get_current_location', false);
+      provider.setCommandLoading(commandKey, false);
+
+      const minDialogDuration = Duration(seconds: 2);
+      final elapsed = DateTime.now().difference(startedAt);
+      if (elapsed < minDialogDuration) {
+        await Future.delayed(minDialogDuration - elapsed);
+      }
+
+      _hidePleaseWaitDialog();
     }
+  }
+
+  // Method to handle Get Location: notification API, 1s delay, then location API
+  Future<void> _handleGetLocation() async {
+    final provider = context.read<CustomerProvider>();
+
+    await _runCommandWithPleaseWaitDialog(
+      commandKey: 'get_current_location',
+      notificationStatus: 'get_current_location',
+      waitMessage: 'Please wait, we are getting the location',
+      waitMessageUrdu: 'براہ کرم انتظار کریں، ہم لوکیشن حاصل کر رہے ہیں',
+      notificationFailedMessage: 'Failed to send location command',
+      fetchData: () => provider.fetchCustomerLocation(widget.customerId),
+      getFetchFailedMessage: () =>
+          provider.locationError ?? 'Failed to fetch location',
+    );
   }
 
   // Show PIN dialog specifically for Get Location
@@ -555,57 +648,26 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
     }
   }
 
-  // Method to handle Get SIM Details with 2-second delay API call
+  // Method to handle Get SIM Details: notification API, 1s delay, then SIM API
   Future<void> _handleGetSimDetails() async {
     final provider = context.read<CustomerProvider>();
-    provider.setCommandLoading('get_sim_details', true);
 
-    try {
-      final ok = await provider.sendMobileNotification(
-        customerId: widget.customerId,
-        status: 'get_sim_details',
-      );
-
-      if (!mounted) return;
-
-      if (ok) {
-        showCustomSnackBar(
-          context,
-          'SIM details request sent. Fetching details...',
-          isError: false,
-        );
-
-        await Future.delayed(const Duration(seconds: 2));
-
+    await _runCommandWithPleaseWaitDialog(
+      commandKey: 'get_sim_details',
+      notificationStatus: 'get_sim_details',
+      waitMessage: 'Please wait, we are getting the SIM details',
+      waitMessageUrdu: 'براہ کرم انتظار کریں، ہم سم کی تفصیلات حاصل کر رہے ہیں',
+      notificationFailedMessage: 'Failed to send SIM details command',
+      fetchData: () => provider.fetchSimDetails(widget.customerId),
+      getFetchFailedMessage: () =>
+          provider.simDetailsError ?? 'Failed to fetch SIM details',
+      onSuccess: () async {
         if (!mounted) return;
-
-        final simDetailsFetched = await provider.fetchSimDetails(
-          widget.customerId,
-        );
-
-        if (!mounted) return;
-
-        if (simDetailsFetched) {
-          setState(() {
-            _showSimDetailsCardInCommands = true;
-          });
-        } else {
-          showCustomSnackBar(
-            context,
-            provider.simDetailsError ?? 'Failed to fetch SIM details',
-            isError: true,
-          );
-        }
-      } else {
-        showCustomSnackBar(
-          context,
-          'Failed to send SIM details command',
-          isError: true,
-        );
-      }
-    } finally {
-      provider.setCommandLoading('get_sim_details', false);
-    }
+        setState(() {
+          _showSimDetailsCardInCommands = true;
+        });
+      },
+    );
   }
 
   // Show PIN dialog specifically for SIM Details
@@ -2063,6 +2125,12 @@ class _CustomerManagementScreenState extends State<CustomerManagementScreen>
           provider,
           forScreenshot: true,
         ),
+        const SizedBox(height: 12),
+        _buildLocationCard(
+          context,
+          provider,
+          forDetailsTab: true,
+        ),
       ],
     );
 
@@ -2590,12 +2658,35 @@ IMEI: ${customer.imei1}
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'SIM Details',
-                    style: robotoBold(context).copyWith(
-                      fontSize: Dimensions.fontSizeDefault(context),
-                      color: Colors.white,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SIM Details',
+                        style: robotoBold(context).copyWith(
+                          fontSize: Dimensions.fontSizeDefault(context),
+                          color: Colors.white,
+                        ),
+                      ),
+                      if (provider.lastSimDetailsUpdatedAt != null &&
+                          provider.lastSimDetailsUpdatedAt!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Last Updated Time',
+                          style: robotoRegular(context).copyWith(
+                            fontSize: Dimensions.fontSizeExtraSmall(context),
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        Text(
+                          _formatLocationDateTime(provider.lastSimDetailsUpdatedAt),
+                          style: robotoMedium(context).copyWith(
+                            fontSize: Dimensions.fontSizeSmall(context),
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 if (!forScreenshot)
@@ -2801,12 +2892,35 @@ IMEI: ${customer.imei1}
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'SIM Details',
-                    style: robotoBold(context).copyWith(
-                      fontSize: Dimensions.fontSizeDefault(context),
-                      color: Colors.white,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SIM Details',
+                        style: robotoBold(context).copyWith(
+                          fontSize: Dimensions.fontSizeDefault(context),
+                          color: Colors.white,
+                        ),
+                      ),
+                      if (provider.lastSimDetailsUpdatedAt != null &&
+                          provider.lastSimDetailsUpdatedAt!.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Last Updated Time',
+                          style: robotoRegular(context).copyWith(
+                            fontSize: Dimensions.fontSizeExtraSmall(context),
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        Text(
+                          _formatLocationDateTime(provider.lastSimDetailsUpdatedAt),
+                          style: robotoMedium(context).copyWith(
+                            fontSize: Dimensions.fontSizeSmall(context),
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 // Refresh button
@@ -5036,7 +5150,24 @@ IMEI: ${customer.imei1}
     );
   }
 
-  // Custom Get Location Button that handles 2-second delay API call
+  String _formatLocationDateTime(String? dateStr) {
+    if (dateStr == null || dateStr.isEmpty) return 'N/A';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year} • $hour:$minute $ampm';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  // Custom Get Location Button that handles notification + location API call
   Widget _buildGetLocationButton(
     BuildContext context,
     CustomerProvider provider,
@@ -5104,14 +5235,25 @@ IMEI: ${customer.imei1}
   }
 
   // Location Card to display device location on map
-  Widget _buildLocationCard(BuildContext context, CustomerProvider provider) {
-    // Only show if we have location data
-    if (!provider.hasLocationResponse && provider.locationError == null) {
+  Widget _buildLocationCard(
+    BuildContext context,
+    CustomerProvider provider, {
+    bool forDetailsTab = false,
+  }) {
+    if (!forDetailsTab) {
+      if (!provider.hasLocationResponse && provider.locationError == null) {
+        return const SizedBox.shrink();
+      }
+    } else if (!provider.isLocationLoading &&
+        !provider.hasLocationResponse &&
+        provider.locationError == null) {
       return const SizedBox.shrink();
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: Dimensions.paddingSizeDefault),
+      padding: EdgeInsets.only(
+        top: forDetailsTab ? 0 : Dimensions.paddingSizeDefault,
+      ),
       child: Card(
         elevation: 4,
         shape: RoundedRectangleBorder(
@@ -5157,24 +5299,47 @@ IMEI: ${customer.imei1}
                     ),
                   ),
                   const Spacer(),
-                  // Close button to clear location data
-                  IconButton(
-                    onPressed: () {
-                      provider.clearLocationData();
-                    },
-                    icon: Icon(
-                      Icons.close,
-                      color: provider.locationError != null
-                          ? Colors.red.shade700
-                          : Colors.teal.shade700,
+                  if (!forDetailsTab)
+                    IconButton(
+                      onPressed: () {
+                        provider.clearLocationData();
+                      },
+                      icon: Icon(
+                        Icons.close,
+                        color: provider.locationError != null
+                            ? Colors.red.shade700
+                            : Colors.teal.shade700,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
                 ],
               ),
               const Divider(height: 24),
-              if (provider.locationError != null) ...[
+              if (provider.isLocationLoading && forDetailsTab) ...[
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Column(
+                      children: [
+                        const SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Loading location...',
+                          style: robotoRegular(context).copyWith(
+                            color: Colors.teal.shade700,
+                            fontSize: Dimensions.fontSizeSmall(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else if (provider.locationError != null) ...[
                 Text(
                   provider.locationError!,
                   style: robotoRegular(context).copyWith(
@@ -5187,6 +5352,30 @@ IMEI: ${customer.imei1}
                 DeviceLocationMapWidget(
                   latitude: provider.currentLatitude!,
                   longitude: provider.currentLongitude!,
+                ),
+                const SizedBox(height: Dimensions.paddingSizeDefault),
+                Text(
+                  'Location Time',
+                  style: robotoMedium(context).copyWith(
+                    fontSize: Dimensions.fontSizeSmall(context),
+                    color: Colors.teal.shade700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'لوکیشن کا وقت',
+                  style: robotoRegular(context).copyWith(
+                    fontSize: Dimensions.fontSizeExtraSmall(context),
+                    color: Colors.teal.shade600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _formatLocationDateTime(provider.lastLocationUpdatedAt),
+                  style: robotoBold(context).copyWith(
+                    fontSize: Dimensions.fontSizeDefault(context),
+                    color: Colors.teal.shade800,
+                  ),
                 ),
               ],
             ],

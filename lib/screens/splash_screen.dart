@@ -8,9 +8,8 @@ import 'package:deviceguardianadmin/widgets/guardian_loading_animation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'home_screen.dart';
 import 'login_screen.dart';
-import 'update_pin_screen.dart';
+import '../util/post_login_navigation.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -56,35 +55,14 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    if (await loginProvider.hasPinConfigured()) {
-      debugPrint('PIN configured, going to home');
-      _navigateToHome();
-    } else {
-      debugPrint('PIN not set, showing Update PIN screen');
-      _navigateToUpdatePin();
-    }
+    if (!mounted) return;
+    await PostLoginNavigation.navigate(context);
   }
 
   void _navigateToLogin() {
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
-    );
-  }
-
-  void _navigateToHome() {
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
-      (route) => false,
-    );
-  }
-
-  void _navigateToUpdatePin() {
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
       (route) => false,
     );
   }

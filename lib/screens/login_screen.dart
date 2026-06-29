@@ -1,9 +1,8 @@
 import 'package:deviceguardianadmin/providers/login_provider.dart';
-import 'package:deviceguardianadmin/screens/home_screen.dart';
 import 'package:deviceguardianadmin/screens/register_screen.dart';
-import 'package:deviceguardianadmin/screens/update_pin_screen.dart';
 import 'package:deviceguardianadmin/util/app_constants.dart';
 import 'package:deviceguardianadmin/util/dimensions.dart';
+import 'package:deviceguardianadmin/util/post_login_navigation.dart';
 import 'package:deviceguardianadmin/util/styles.dart';
 import 'package:deviceguardianadmin/widgets/custom_text_field_widget.dart';
 import 'package:flutter/material.dart';
@@ -47,20 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (!mounted) return;
 
-        final pinConfigured = await provider.hasPinConfigured();
-        if (!mounted) return;
-
-        if (pinConfigured) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const HomeScreen()),
-            (route) => false,
-          );
-        } else {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (context) => const UpdatePinScreen(isFirstTime: true)),
-            (route) => false,
-          );
-        }
+        await PostLoginNavigation.navigate(context);
       } else if (provider.errorMessage != null && mounted) {
         showCustomSnackBar(context, provider.errorMessage!, isError: true);
       }

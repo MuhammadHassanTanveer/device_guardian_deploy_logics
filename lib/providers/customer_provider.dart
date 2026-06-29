@@ -2030,6 +2030,7 @@ class CustomerProvider with ChangeNotifier {
   String? locationError;
   double? currentLatitude;
   double? currentLongitude;
+  String? lastLocationUpdatedAt;
   bool hasLocationResponse = false;
 
   /// Fetch current location for a customer
@@ -2079,9 +2080,13 @@ class CustomerProvider with ChangeNotifier {
                 data['data']?['longitude'] ??
                 data['data']?['lng'],
           );
+          lastLocationUpdatedAt = data['last_location_updated_at']?.toString() ??
+              data['data']?['last_location_updated_at']?.toString() ??
+              data['location_updated_at']?.toString() ??
+              data['data']?['location_updated_at']?.toString();
           hasLocationResponse = true;
           debugPrint(
-            'Location fetched: lat=$currentLatitude, lng=$currentLongitude',
+            'Location fetched: lat=$currentLatitude, lng=$currentLongitude, updatedAt=$lastLocationUpdatedAt',
           );
           return true;
         } else {
@@ -2119,6 +2124,7 @@ class CustomerProvider with ChangeNotifier {
   void clearLocationData() {
     currentLatitude = null;
     currentLongitude = null;
+    lastLocationUpdatedAt = null;
     hasLocationResponse = false;
     locationError = null;
     notifyListeners();
@@ -2128,6 +2134,7 @@ class CustomerProvider with ChangeNotifier {
   bool isSimDetailsLoading = false;
   String? simDetailsError;
   Map<String, dynamic>? simDetailsData;
+  String? lastSimDetailsUpdatedAt;
 
   /// Fetch SIM details for a customer
   /// GET: api/mobile/sim-details/customer/{customer_id}
@@ -2165,7 +2172,14 @@ class CustomerProvider with ChangeNotifier {
           simDetailsData = data['data'] is Map
               ? Map<String, dynamic>.from(data['data'])
               : data;
-          debugPrint('SIM details fetched: $simDetailsData');
+          lastSimDetailsUpdatedAt = data['updated_at']?.toString() ??
+              data['data']?['updated_at']?.toString() ??
+              data['last_updated_at']?.toString() ??
+              data['data']?['last_updated_at']?.toString() ??
+              simDetailsData?['updated_at']?.toString();
+          debugPrint(
+            'SIM details fetched: $simDetailsData, updatedAt=$lastSimDetailsUpdatedAt',
+          );
           return true;
         } else {
           simDetailsError = data['message'] ?? 'Failed to get SIM details';
@@ -2194,6 +2208,7 @@ class CustomerProvider with ChangeNotifier {
   void clearSimDetailsData() {
     simDetailsData = null;
     simDetailsError = null;
+    lastSimDetailsUpdatedAt = null;
     notifyListeners();
   }
 

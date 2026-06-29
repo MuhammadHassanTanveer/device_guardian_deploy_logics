@@ -432,6 +432,96 @@ class LoginProvider with ChangeNotifier {
     return _pinCode;
   }
 
+  static bool _isValidCoordinate(String? value) {
+    if (value == null || value.isEmpty || value == 'null') {
+      return false;
+    }
+    return double.tryParse(value) != null;
+  }
+
+  /// Whether the retailer has a shop location saved in the database.
+  Future<bool> hasShopLocationConfigured() async {
+    final prefs = await SharedPreferences.getInstance();
+    final latitude = prefs.getString('user_latitude');
+    final longitude = prefs.getString('user_longitude');
+    return _isValidCoordinate(latitude) && _isValidCoordinate(longitude);
+  }
+
+  /// Stores the retailer's shop location via API and updates local storage.
+  Future<bool> storeUserLocation(double latitude, double longitude) async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('auth_token') ?? '';
+
+      if (token.isEmpty) {
+        errorMessage = 'Session expired. Please login again.';
+        isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.baseUrl}/mobile/store-user-location'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'latitude': latitude,
+          'longitude': longitude,
+        }),
+      );
+
+      debugPrint('storeUserLocation API Response: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+
+        if (data['success'] == true || data['status'] == true) {
+          await prefs.setString('user_latitude', latitude.toString());
+          await prefs.setString('user_longitude', longitude.toString());
+
+          isLoading = false;
+          notifyListeners();
+          return true;
+        }
+
+        errorMessage = data['message'] ?? 'Failed to save shop location';
+        isLoading = false;
+        notifyListeners();
+        return false;
+      } else if (response.statusCode == 401) {
+        await SessionManager.handleSessionExpiry(response.statusCode);
+        errorMessage = 'Session expired. Please login again.';
+        isLoading = false;
+        notifyListeners();
+        return false;
+      } else {
+        try {
+          final data = jsonDecode(response.body);
+          errorMessage =
+              data['message'] ?? 'Failed to save shop location. Please try again.';
+        } catch (e) {
+          errorMessage = 'Failed to save shop location. Please try again.';
+        }
+        isLoading = false;
+        notifyListeners();
+        return false;
+      }
+    } catch (e) {
+      debugPrint('storeUserLocation: Exception - $e');
+      errorMessage = 'An error occurred. Please check your connection.';
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Whether the retailer has a PIN set (API first; local storage only if API fails).
   Future<bool> hasPinConfigured() async {
     final pinCode = await getPinCode();
